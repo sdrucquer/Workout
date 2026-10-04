@@ -306,13 +306,17 @@ function vWorkout() {
       <button class="icon" data-act="wk-back" aria-label="Back">${I.back}</button>
       <div class="wk-title">
         <p class="eyebrow">${editing
-          ? `Editing · <input type="date" class="date-in" data-f="date" value="${w.date}"> · <input class="date-in min-in" inputmode="numeric" data-f="mins" value="${mins(w.end - w.start)}" aria-label="Duration in minutes"> min`
+          ? 'Editing'
           : `${DAYS[w.day] ?? ''} · <span data-el="elapsed">${fmtDur((Date.now() - w.start) / 1000)}</span>`}</p>
         <h1>${esc(w.title)}</h1>
       </div>
       <button class="icon" data-act="wk-menu" aria-label="More">${I.dots}</button>
     </header>
     <main class="page wk-page">
+      ${editing ? `<section class="card when">
+        <label><span>Date</span><input type="date" class="text-in" data-f="date" value="${w.date}"></label>
+        <label><span>Duration · min</span><input class="text-in" inputmode="numeric" data-f="mins" value="${mins(w.end - w.start)}"></label>
+      </section>` : ''}
       ${warm}
       ${cards}
       <button class="btn ghost add" data-act="add-ex">${I.plus} Add exercise</button>
@@ -936,7 +940,14 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => re
 applyTheme();
 if (S.active) ui.screen = 'workout';
 render();
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // pick up new versions on the next open instead of the one after
+  const hadSW = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadSW) { save(); location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+}
 
 // test hook
 window.__wt = { get S() { return S; }, ui, render, save, reload: () => { S = load(); render(); } };
