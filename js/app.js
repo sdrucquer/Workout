@@ -306,7 +306,7 @@ function vWorkout() {
       <button class="icon" data-act="wk-back" aria-label="Back">${I.back}</button>
       <div class="wk-title">
         <p class="eyebrow">${editing
-          ? `Editing · <input type="date" class="date-in" data-f="date" value="${w.date}">`
+          ? `Editing · <input type="date" class="date-in" data-f="date" value="${w.date}"> · <input class="date-in min-in" inputmode="numeric" data-f="mins" value="${mins(w.end - w.start)}" aria-label="Duration in minutes"> min`
           : `${DAYS[w.day] ?? ''} · <span data-el="elapsed">${fmtDur((Date.now() - w.start) / 1000)}</span>`}</p>
         <h1>${esc(w.title)}</h1>
       </div>
@@ -406,14 +406,17 @@ function vSummary() {
     if (lt && ex.t === 'w' && n(ts.w) !== n(lt.w)) deltas.push([ex.n, n(ts.w) - n(lt.w)]);
   }
   const tile = (v, l) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`;
+  const dur = mins(w.end - w.start);
+  const minTile = `<label class="tile"><input class="tile-in" inputmode="numeric" data-f="mins" value="${dur}" aria-label="Duration in minutes"><span>Minutes ✎</span></label>`;
   const stats = w.ex.some(e => e.t === 'run' && hasData(e))
-    ? tile(fmtRun(w.ex.find(e => e.t === 'run')).split(' · ')[0], 'Distance') + tile(mins(w.end - w.start), 'Minutes')
-    : tile(mins(w.end - w.start), 'Minutes') + tile(sets, 'Sets') + (vol ? tile(Math.round(vol).toLocaleString(), `${unit()} volume`) : '');
+    ? tile(fmtRun(w.ex.find(e => e.t === 'run')).split(' · ')[0], 'Distance') + minTile
+    : minTile + tile(sets, 'Sets') + (vol ? tile(Math.round(vol).toLocaleString(), `${unit()} volume`) : '');
   return `<main class="page summary">
     <div class="done-badge">${I.check}</div>
     <p class="eyebrow center">Workout complete</p>
     <h1 class="big center">${esc(w.title)}</h1>
     <div class="tiles">${stats}</div>
+    ${dur < 10 ? '<p class="muted small center">Logged it afterwards? Tap Minutes to set how long it really took.</p>' : ''}
     ${prs.length ? `<section class="card"><p class="eyebrow gold">Personal records</p>${prs.map(([a, b]) =>
       `<div class="row"><span>${esc(a)}</span><b class="pr">${esc(b)}</b></div>`).join('')}</section>` : ''}
     ${deltas.length ? `<section class="card"><p class="eyebrow">Vs last time</p>${deltas.map(([a, d]) =>
@@ -885,7 +888,13 @@ $app.addEventListener('focusin', e => {
   if (el.matches('input.in, .fld input')) { el.dataset.prev = el.value; requestAnimationFrame(() => el.select()); }
 });
 $app.addEventListener('input', e => {
-  const el = e.target, f = el.dataset.f, w = cur();
+  const el = e.target, f = el.dataset.f;
+  if (f === 'mins') {
+    const s = ui.edit || S.sessions.find(x => x.id === ui.summary), m = Math.round(n(el.value));
+    if (s && m > 0) { s.end = s.start + m * 60000; if (!ui.edit) saveSoon(); }
+    return;
+  }
+  const w = cur();
   if (!f || !w) return;
   if (f === 'date') {
     if (!el.value) return;

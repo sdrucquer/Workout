@@ -1,6 +1,6 @@
 // Offline cache. Serves cached files instantly and refreshes them in the
 // background, so the app opens at the gym with no signal. Bump VERSION on release.
-const VERSION = 'wt-v1';
+const VERSION = 'wt-v2';
 const FILES = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/program.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png'];
 
 self.addEventListener('install', e => {
