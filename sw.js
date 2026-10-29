@@ -1,6 +1,6 @@
 // Offline cache. Tries the network first so updates show up right away, and
 // falls back to the cached copy when offline or the gym signal is bad.
-const VERSION = 'wt-v3';
+const VERSION = 'wt-v4';
 const FILES = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/program.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png'];
 
 self.addEventListener('install', e => {

@@ -1,7 +1,11 @@
 // Weekly program. Keys (k) are the history identity of an exercise — renaming
 // `n` is safe, changing `k` starts a fresh history.
-// Types: w = weight × reps, bw = reps (optional added weight), t = seconds,
-//        run = distance + time, strides = count.
+// Types: w = weight × reps, bw = reps (optional added or assisted weight),
+//        t = seconds, run = distance + time, strides = count.
+// alts: other exercises you can switch to in one tap (each keeps its own history).
+// Warm-ups: { n: name, reps: '10', sec: 120 } — reps and sec are optional.
+// This is the default program; edits made in the app are saved on the device
+// and take priority over it.
 
 export const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -10,7 +14,7 @@ export const REST_NOTE = 'Rest, walking, mobility, or optional light activity.';
 export const PROGRAM = {
   1: {
     title: 'Push', short: 'Push',
-    warmup: ['Arm circles', 'Band pull-aparts', 'Scapular push-ups', 'Light warm-up set'],
+    warmup: [{ n: 'Arm circles', reps: '10' }, { n: 'Band pull-aparts', reps: '15' }, { n: 'Scapular push-ups', reps: '10' }, { n: 'Light warm-up set', reps: '10' }],
     ex: [
       { k: 'bench', n: 'Bench Press', t: 'w', sets: 3, target: '6–8', rest: 150, major: true },
       { k: 'incline-db', n: 'Incline DB Press', t: 'w', sets: 3, target: '8–10', rest: 120, major: true },
@@ -22,7 +26,7 @@ export const PROGRAM = {
   },
   2: {
     title: 'Speed + Core', short: 'Speed',
-    warmup: ['10 min easy jog', 'Dynamic leg/ankle mobility'],
+    warmup: [{ n: 'Easy jog', sec: 600 }, { n: 'Dynamic leg/ankle mobility' }],
     ex: [
       { k: 'strides', n: 'Strides', t: 'strides', target: '4–6 × 20s @ 70–80%', sec: 'Running',
         note: '60–90s easy recovery between · 10 min easy cooldown' },
@@ -34,9 +38,10 @@ export const PROGRAM = {
   },
   3: {
     title: 'Pull', short: 'Pull',
-    warmup: ['2 min easy row', 'Band pull-aparts', 'Scapular pull-ups', 'Light cable row'],
+    warmup: [{ n: 'Easy row', sec: 120 }, { n: 'Band pull-aparts', reps: '15' }, { n: 'Scapular pull-ups', reps: '8' }, { n: 'Light cable row', reps: '12' }],
     ex: [
-      { k: 'pullup', n: 'Pull-ups / Lat Pulldown', t: 'bw', sets: 3, target: '6–10', rest: 120, major: true },
+      { k: 'pullup', n: 'Pull-ups', t: 'bw', sets: 3, target: '6–10', rest: 120, major: true,
+        alts: [{ k: 'lat-pulldown', n: 'Lat Pulldown', t: 'w' }] },
       { k: 'cs-row', n: 'Chest-Supported Row', t: 'w', sets: 3, target: '8–10', rest: 120, major: true },
       { k: 'sa-cable-row', n: 'Single-Arm Cable Row', t: 'w', sets: 2, target: '10/side', rest: 60 },
       { k: 'face-pull', n: 'Face Pull / Rear-Delt Fly', t: 'w', sets: 2, target: '12–15', rest: 60 },
@@ -46,7 +51,7 @@ export const PROGRAM = {
   },
   4: {
     title: 'Legs + Ankle', short: 'Legs',
-    warmup: ['Bodyweight squats × 10', 'Reverse lunges × 8/side', 'Leg swings × 10/side', 'Ankle rocks × 10/side', 'Glute bridges × 10'],
+    warmup: [{ n: 'Bodyweight squats', reps: '10' }, { n: 'Reverse lunges', reps: '8/side' }, { n: 'Leg swings', reps: '10/side' }, { n: 'Ankle rocks', reps: '10/side' }, { n: 'Glute bridges', reps: '10' }],
     ex: [
       { k: 'bss', n: 'Bulgarian Split Squat', t: 'w', sets: 3, target: '6–8/leg', rest: 120, major: true, sec: 'Strength' },
       { k: 'rdl', n: 'Romanian Deadlift', t: 'w', sets: 3, target: '6–8', rest: 150, major: true, sec: 'Strength' },
@@ -67,5 +72,6 @@ export const PROGRAM = {
   },
 };
 
-// Order workouts appear in pickers and Progress.
+// Order workouts appear in pickers and Progress. Workouts that aren't runs
+// also form the cycle: Today suggests the one after the last one you did.
 export const ORDER = [1, 2, 3, 4, 0];
