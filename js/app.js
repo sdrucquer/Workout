@@ -113,7 +113,7 @@ const isRunDay = d => !!prog()[d]?.ex.length && prog()[d].ex.every(e => e.t === 
 const rotation = () => ORDER.filter(d => prog()[d] && !isRunDay(d));
 function nextUp() {
   const rot = rotation();
-  const last = [...S.sessions].reverse().find(s => s.src !== 'strava' && rot.includes(s.day));
+  const last = [...S.sessions].reverse().find(s => rot.includes(s.day));
   return last ? rot[(rot.indexOf(last.day) + 1) % rot.length] : null;
 }
 function saveProgramDay(d, def) {
@@ -345,7 +345,7 @@ function sRow(s) {
   const d = fromDk(s.date);
   return `<button class="srow" data-act="open-session" data-id="${s.id}">
       <span class="sday"><b>${d.getDate()}</b><small>${d.toLocaleDateString(undefined, { weekday: 'short' })}</small></span>
-      <span class="pname">${esc(s.title)}<small>${s.src === 'strava' ? '<em class="tag">Strava</em> · ' : ''}${mins(s.end - s.start)} min${sets ? ` · ${sets} sets` : ''}${run ? ` · ${esc(fmtRun(run))}` : ''}</small></span>
+      <span class="pname">${esc(s.title)}<small>${mins(s.end - s.start)} min${sets ? ` · ${sets} sets` : ''}${run ? ` · ${esc(fmtRun(run))}` : ''}</small></span>
       ${prs ? `<b class="pr">${prs} PR</b>` : ''}${I.chev}</button>`;
 }
 
@@ -371,7 +371,6 @@ function vHome() {
   // On a workout day, follow the cycle (the workout after the last one you did);
   // run days stay on the calendar.
   const show = prog()[day] ? (isRunDay(day) ? day : next ?? day) : null;
-  const strava = stravaOn();
   let hero, heroDay = null;
   if (sel) hero = vDayHero(sel);
   else if (a) {
@@ -392,17 +391,13 @@ function vHome() {
   } else if (show != null) {
     const p = prog()[show];
     heroDay = show;
-    const last = [...S.sessions].reverse().find(s => s.day === show && s.src !== 'strava');
-    const runStrava = isRunDay(show) && strava;
+    const last = [...S.sessions].reverse().find(s => s.day === show);
     hero = `
       <p class="eyebrow">${DAYS[day]}${show !== day ? ' · Next in your cycle' : ''}</p>
       <h2 class="big">${esc(p.title)}</h2>
       ${preview(p)}
-      ${runStrava ? '<p class="muted small">Track it in Strava. It shows up here once it syncs.</p>'
-        : last ? `<p class="muted small">Last time ${fmtDate(last.date)} · ${mins(last.end - last.start)} min</p>` : ''}
-      ${runStrava
-        ? '<button class="btn primary xl" data-act="strava-sync">Sync from Strava</button>'
-        : `<button class="btn primary xl" data-act="start" data-day="${show}">Start Workout</button>`}`;
+      ${last ? `<p class="muted small">Last time ${fmtDate(last.date)} · ${mins(last.end - last.start)} min</p>` : ''}
+      <button class="btn primary xl" data-act="start" data-day="${show}">Start Workout</button>`;
   } else {
     const nx = next != null && prog()[next];
     hero = `
@@ -583,25 +578,7 @@ function vSummary() {
 }
 
 // ----- progress -----
-// Miles per week (Monday start), including weeks with no runs.
-function weekly(k) {
-  const H = hist(k);
-  if (!H.length) return [];
-  const wk = d => { const x = fromDk(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
-  const sums = new Map();
-  for (const { s, ex } of H) {
-    const key = dk(wk(s.date)), v = sums.get(key) || { mi: 0, runs: 0 };
-    v.mi += n(ex.run.dist); v.runs++; sums.set(key, v);
-  }
-  const out = [], end = wk(dk(new Date()));
-  for (const d = wk(H[0].s.date); d <= end; d.setDate(d.getDate() + 7)) {
-    const key = dk(d), v = sums.get(key) || { mi: 0, runs: 0 };
-    out.push({ x: d.getTime(), date: key, y: Math.round(v.mi * 10) / 10, lbl: `${fw(Math.round(v.mi * 10) / 10)} mi · ${v.runs} run${v.runs === 1 ? '' : 's'}`, id: '' });
-  }
-  return out;
-}
 function series(k, metric) {
-  if (metric === 'wk') return weekly(k);
   return hist(k).map(({ s, ex }) => {
     let y = 0, lbl = '';
     if (metric === 'w') { const t = topSet(ex); y = n(t.w); lbl = fmtSet(ex, t); }
@@ -618,7 +595,7 @@ const defMetric = t => (t === 'w' ? 'w' : t === 'run' ? 'dist' : t === 'strides'
 function metricsFor(def) {
   const t = def.t;
   if (t === 'w') return [['w', 'Top set'], ['e', 'Est. 1RM']];
-  if (t === 'run') return [['dist', 'Per run'], ['wk', 'Weekly'], ['pace', 'Pace']];
+  if (t === 'run') return [['dist', 'Distance'], ['pace', 'Pace']];
   if (t === 'bw' && series(def.k, 'l').length) return [['r', 'Reps'], ['l', 'Load']];
   return [];
 }
@@ -670,7 +647,7 @@ function vDetail() {
   const pts = series(def.k, m), H = hist(def.k);
   const lastP = pts.at(-1), firstP = pts[0];
   const fmtY = y => (m === 'pace' ? fmtDur(y * 60) : fw(Math.round(y * 10) / 10));
-  const yUnit = { w: unit(), e: unit(), l: unit(), r: t === 't' ? 'sec' : 'reps', dist: 'mi', wk: 'mi/wk', pace: '/mi', count: 'strides' }[m];
+  const yUnit = { w: unit(), e: unit(), l: unit(), r: t === 't' ? 'sec' : 'reps', dist: 'mi', pace: '/mi', count: 'strides' }[m];
 
   let hero = '';
   if (lastP) {
@@ -844,14 +821,6 @@ function openAddExercise(replace = null) {
 function openSettings() {
   const st = S.settings;
   const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button class="${st[key] === v ? 'on' : ''}" data-act="set" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
-  const ago = t => { const m = Math.round((Date.now() - t) / 60000); return !t ? 'not yet' : m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : fmtDate(dk(new Date(t))); };
-  const strava = stravaOn()
-    ? `<div class="card info">Connected${ST.name ? ` as ${esc(ST.name)}` : ''} · last synced ${ago(ST.synced)}</div>
-       <div class="row2"><button class="btn ghost" data-act="strava-sync">Sync now</button><button class="btn ghost" data-act="strava-off">Disconnect</button></div>`
-    : `<input class="text-in" data-sf="sid" inputmode="numeric" placeholder="Client ID" value="${esc(ST.id)}" autocomplete="off">
-       <input class="text-in" data-sf="ssec" placeholder="Client Secret" value="${esc(ST.secret)}" autocomplete="off" autocapitalize="off" spellcheck="false">
-       <button class="btn ghost" data-act="strava-connect">Connect Strava</button>
-       <p class="muted small">Runs you record in Strava show up here. You need your own Strava API app; the steps are in the README. These keys stay on this device.</p>`;
   ui.sheet = [];
   $sheet.innerHTML = `<div class="sheet-bg" data-act="sheet-x"></div><div class="sheet-panel">
     <p class="eyebrow center">Settings</p>
@@ -862,7 +831,6 @@ function openSettings() {
     <p class="lbl">Rest timer after each set</p>${seg('rest', [[true, 'On'], [false, 'Off']])}
     <p class="lbl">Workouts · change exercises, sets and warm-ups</p>
     <div class="chips">${ORDER.filter(d => prog()[d]).map(d => `<button class="chip" data-act="edit-prog" data-d="${d}">${esc(prog()[d].short)}</button>`).join('')}</div>
-    <p class="lbl">Strava runs</p>${strava}
     <p class="lbl">Backup · ${S.sessions.length} workouts saved on this device</p>
     <div class="row2"><button class="btn ghost" data-act="export">Export</button><button class="btn ghost" data-act="import">Import</button></div>
     <button class="sheet-btn cancel" data-act="sheet-x">Close</button></div>`;
@@ -871,8 +839,6 @@ function openSettings() {
 $sheet.addEventListener('input', e => {
   const f = e.target.dataset.sf, v = e.target.value.trim();
   if (f === 'bw') { S.settings.bw = v; saveSoon(); }
-  else if (f === 'sid') { ST.id = v; stSave(); }
-  else if (f === 'ssec') { ST.secret = v; stSave(); }
 });
 
 // ----- program editor -----
@@ -951,98 +917,6 @@ function saveProgram() {
   toast(S.active?.day === d ? 'Saved · applies next time you start it' : 'Saved');
   leaveProgram();
 }
-
-// ---------- Strava ----------
-// Your Strava app keys and tokens live in their own slot on this device: not in
-// the code and not in backups.
-const SK = 'wt-strava';
-const SV = { id: '', secret: '', access: '', refresh: '', exp: 0, name: '', after: 0, synced: 0, skip: [] };
-function stLoad() { try { return { ...SV, ...JSON.parse(localStorage.getItem(SK)) }; } catch { return { ...SV }; } }
-let ST = stLoad();
-function stSave() { try { localStorage.setItem(SK, JSON.stringify(ST)); } catch {} }
-const stravaOn = () => !!ST.refresh;
-const redirectUri = () => location.origin + location.pathname;
-
-function stravaConnect() {
-  if (!ST.id || !ST.secret) { toast('Add your Strava Client ID and Secret first'); return; }
-  const q = new URLSearchParams({ client_id: ST.id, response_type: 'code', redirect_uri: redirectUri(), approval_prompt: 'auto', scope: 'activity:read_all', state: 'wt-strava' });
-  save();
-  location.href = `https://www.strava.com/oauth/authorize?${q}`;
-}
-async function stravaToken(body) {
-  const res = await fetch('https://www.strava.com/oauth/token', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ client_id: ST.id, client_secret: ST.secret, ...body }),
-  });
-  if (!res.ok) throw new Error(`Strava token ${res.status}`);
-  const j = await res.json();
-  ST.access = j.access_token; ST.refresh = j.refresh_token; ST.exp = j.expires_at;
-  if (j.athlete) ST.name = [j.athlete.firstname, j.athlete.lastname].filter(Boolean).join(' ');
-  stSave();
-}
-// Strava sends you back here with ?code=… after you approve.
-async function stravaReturn() {
-  const q = new URLSearchParams(location.search);
-  if (q.get('state') !== 'wt-strava') return;
-  history.replaceState(null, '', location.pathname);
-  if (q.get('error') || !q.get('code')) { toast('Strava wasn’t connected'); return; }
-  if (!(q.get('scope') || '').includes('activity:read')) { toast('Strava needs permission to see your activities'); return; }
-  try {
-    await stravaToken({ code: q.get('code'), grant_type: 'authorization_code' });
-    toast('Strava connected');
-    await stravaSync(false);
-  } catch { toast('Couldn’t finish connecting to Strava'); }
-}
-function stravaSession(a) {
-  const start = Date.parse(a.start_date), mi = Math.round((a.distance / 1609.344) * 100) / 100;
-  return {
-    id: `strava-${a.id}`, src: 'strava', day: 0, title: a.name || 'Run',
-    date: dk(new Date(start)), start, end: start + (a.elapsed_time || a.moving_time || 60) * 1000, warm: [],
-    ex: [{ k: 'easy-run', n: 'Run', t: 'run', target: '', sec: '', note: '', rest: 0, skip: false,
-      run: { dist: mi ? String(mi) : '', time: a.moving_time ? fmtDur(a.moving_time) : '', d: true } }],
-  };
-}
-let syncing = false;
-async function stravaSync(manual) {
-  if (!stravaOn() || syncing) return;
-  syncing = true;
-  try {
-    if (ST.exp * 1000 < Date.now() + 60000) await stravaToken({ grant_type: 'refresh_token', refresh_token: ST.refresh });
-    // first sync pulls the last 60 days; after that, only what's new
-    const after = ST.after || Math.floor(Date.now() / 1000) - 60 * 86400;
-    const have = new Set(S.sessions.map(s => s.id));
-    let added = 0, newest = ST.after;
-    for (let page = 1; page < 20; page++) {
-      const res = await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=100&page=${page}`,
-        { headers: { Authorization: `Bearer ${ST.access}` } });
-      if (res.status === 401) { ST.access = ST.refresh = ''; stSave(); toast('Strava disconnected · connect again in Settings'); return; }
-      if (!res.ok) throw new Error(`Strava ${res.status}`);
-      const list = await res.json();
-      for (const a of list) {
-        newest = Math.max(newest, Math.floor(Date.parse(a.start_date) / 1000));
-        if (!/Run/.test(a.sport_type || a.type || '')) continue;
-        const s = stravaSession(a);
-        if (have.has(s.id) || ST.skip.includes(s.id)) continue;
-        S.sessions.push(s); have.add(s.id); added++;
-      }
-      if (list.length < 100) break;
-    }
-    ST.after = newest; ST.synced = Date.now(); stSave();
-    if (added) { sortSessions(); save(); }
-    if (manual || added) toast(added ? `Added ${added} run${added > 1 ? 's' : ''} from Strava` : 'No new runs on Strava');
-    if (ui.screen !== 'workout' && ui.screen !== 'prog') render();
-    if ($sheet.classList.contains('open') && ui.sheet?.length === 0 && $sheet.querySelector('[data-act=strava-off]')) openSettings();
-  } catch { if (manual) toast('Couldn’t reach Strava'); }
-  finally { syncing = false; }
-}
-function stravaOff() {
-  if (!confirm('Disconnect Strava? Runs already imported stay.')) return;
-  const tok = ST.access;
-  ST.access = ST.refresh = ''; ST.exp = 0; stSave();
-  if (tok) fetch('https://www.strava.com/oauth/deauthorize', { method: 'POST', headers: { Authorization: `Bearer ${tok}` } }).catch(() => {});
-  openSettings();
-}
-const stravaAuto = () => { if (stravaOn() && Date.now() - ST.synced > 10 * 60000) stravaSync(false); };
 
 // ---------- rest timer ----------
 let audio;
@@ -1221,8 +1095,6 @@ const actions = {
   'wk-menu': () => {
     if (ui.edit) openSheet(ui.edit.title, [{ label: 'Delete workout', danger: true, fn: () => {
       if (!confirm('Delete this workout permanently?')) return;
-      // keep a deleted Strava run from coming back on the next sync
-      if (ui.edit.src === 'strava') { ST.skip.push(ui.edit.id); stSave(); }
       S.sessions = S.sessions.filter(s => s.id !== ui.edit.id); save(); toast('Deleted'); leaveEdit();
     } }]);
     else {
@@ -1280,9 +1152,6 @@ const actions = {
     items.push({ label: 'Remove', danger: true, fn: () => { ex.splice(j, 1); } });
     openSheet(ex[j].n || 'Exercise', items.map(it => ({ ...it, fn: () => { it.fn(); render(); } })));
   },
-  'strava-connect': stravaConnect,
-  'strava-sync': () => stravaSync(true),
-  'strava-off': stravaOff,
   'warm-toggle': () => { ui.warmOpen = !ui.warmOpen; render(); },
   warm: b => { const x = cur().warm[+b.dataset.j]; x.d = !x.d; persist(); render(); },
   'set-done': b => {
@@ -1433,8 +1302,6 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => re
 applyTheme();
 if (S.active) ui.screen = 'workout';
 render();
-stravaReturn().finally(stravaAuto);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) stravaAuto(); });
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   // pick up new versions on the next open instead of the one after
   const hadSW = !!navigator.serviceWorker.controller;
@@ -1445,4 +1312,4 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 // test hook
-window.__wt = { get S() { return S; }, get ST() { return ST; }, ui, render, save, reload: () => { S = load(); ST = stLoad(); render(); }, stravaSession, nextUp };
+window.__wt = { get S() { return S; }, ui, render, save, reload: () => { S = load(); render(); }, nextUp };

@@ -273,7 +273,6 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .srow .sday b { font-size: 20px; font-weight: 800; }
 .srow .sday small { font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600; }
 .srow .pr { font-size: 12px; background: var(--gold-soft); padding: 3px 7px; border-radius: 6px; }
-.tag { font-style: normal; font-weight: 700; color: #fc5200; }
 .day-list { margin-top: 16px; }
 .hero .btn.link { margin-top: 10px; }
 .preview li small { font-size: 13px; }
@@ -353,7 +352,6 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .when .text-in { background: var(--surface-2); height: 46px; font-weight: 600; min-width: 0; -webkit-appearance: none; appearance: none; }
 
 /* ---------- settings + program editor ---------- */
-.card.info { margin: 0; padding: 12px 14px; font-size: 14px; }
 .check { display: flex; align-items: center; gap: 10px; padding: 6px 4px; font-size: 15px; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
 .pe-warm { display: grid; grid-template-columns: 1fr 64px 64px 34px; gap: 6px; align-items: center; margin-bottom: 6px; }

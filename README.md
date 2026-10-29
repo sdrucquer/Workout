@@ -8,8 +8,7 @@ A tiny personal workout log. Open it, see today's workout, tap ✓, done.
 - **Swapping lifts** — Pull-ups can switch to Lat Pulldown in one tap (each keeps its own history; next time starts with whichever you did last). Any exercise can be swapped for another from its ••• menu, optionally for good.
 - **Timed stuff** — warm-ups can have reps or a time (e.g. Easy row 2:00) and timed sets (Side Plank) get a Start button that counts down and checks the set off.
 - **Edit workouts** — Settings → Workouts, or ••• during a workout. Rename, change sets/reps/rest/type, edit warm-ups, add or remove exercises. Saved on the device.
-- **Strava** — runs you record in Strava show up automatically (see below).
-- **Progress** — every exercise with a sparkline; tap one for a chart (top set / est. 1RM; for runs, distance per run, miles per week and pace), PR, and recent sessions.
+- **Progress** — every exercise with a sparkline; tap one for a chart (top set / est. 1RM, or distance / pace for runs), PR, and recent sessions.
 - **History** — every workout; tap to edit or delete.
 
 No build step, no backend, no account. Plain HTML/CSS/JS. Data lives on the device (localStorage), with Export/Import backup in Settings (gear icon).
@@ -27,20 +26,6 @@ npx http-server -c-1 .
 2. Open the Pages URL in Safari → Share → **Add to Home Screen**.
 
 Home-screen install matters: it opens full-screen, works offline, and iOS keeps its storage. Export a backup now and then anyway.
-
-## Connect Strava
-
-The app talks to Strava straight from your phone, so you need your own (free) Strava API app:
-
-1. On a computer, go to https://www.strava.com/settings/api and create an app.
-   - Application name: anything, e.g. "Workout"
-   - Category: anything
-   - Website: your Pages URL, e.g. `https://sdrucquer.github.io/workout/`
-   - **Authorization Callback Domain:** `sdrucquer.github.io` (just the domain)
-2. Copy the **Client ID** and **Client Secret** from that page.
-3. In the app: Settings → Strava runs → paste both → **Connect Strava** → approve.
-
-It imports your runs from the last 60 days, then checks for new ones whenever you open the app. The ID, secret and tokens are stored only on the phone (not in this repo, and not in backups). Disconnect any time in Settings.
 
 ## Change the program
 
