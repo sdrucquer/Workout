@@ -583,7 +583,25 @@ function vSummary() {
 }
 
 // ----- progress -----
+// Miles per week (Monday start), including weeks with no runs.
+function weekly(k) {
+  const H = hist(k);
+  if (!H.length) return [];
+  const wk = d => { const x = fromDk(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+  const sums = new Map();
+  for (const { s, ex } of H) {
+    const key = dk(wk(s.date)), v = sums.get(key) || { mi: 0, runs: 0 };
+    v.mi += n(ex.run.dist); v.runs++; sums.set(key, v);
+  }
+  const out = [], end = wk(dk(new Date()));
+  for (const d = wk(H[0].s.date); d <= end; d.setDate(d.getDate() + 7)) {
+    const key = dk(d), v = sums.get(key) || { mi: 0, runs: 0 };
+    out.push({ x: d.getTime(), date: key, y: Math.round(v.mi * 10) / 10, lbl: `${fw(Math.round(v.mi * 10) / 10)} mi · ${v.runs} run${v.runs === 1 ? '' : 's'}`, id: '' });
+  }
+  return out;
+}
 function series(k, metric) {
+  if (metric === 'wk') return weekly(k);
   return hist(k).map(({ s, ex }) => {
     let y = 0, lbl = '';
     if (metric === 'w') { const t = topSet(ex); y = n(t.w); lbl = fmtSet(ex, t); }
@@ -600,7 +618,7 @@ const defMetric = t => (t === 'w' ? 'w' : t === 'run' ? 'dist' : t === 'strides'
 function metricsFor(def) {
   const t = def.t;
   if (t === 'w') return [['w', 'Top set'], ['e', 'Est. 1RM']];
-  if (t === 'run') return [['dist', 'Distance'], ['pace', 'Pace']];
+  if (t === 'run') return [['dist', 'Per run'], ['wk', 'Weekly'], ['pace', 'Pace']];
   if (t === 'bw' && series(def.k, 'l').length) return [['r', 'Reps'], ['l', 'Load']];
   return [];
 }
@@ -652,7 +670,7 @@ function vDetail() {
   const pts = series(def.k, m), H = hist(def.k);
   const lastP = pts.at(-1), firstP = pts[0];
   const fmtY = y => (m === 'pace' ? fmtDur(y * 60) : fw(Math.round(y * 10) / 10));
-  const yUnit = { w: unit(), e: unit(), l: unit(), r: t === 't' ? 'sec' : 'reps', dist: 'mi', pace: '/mi', count: 'strides' }[m];
+  const yUnit = { w: unit(), e: unit(), l: unit(), r: t === 't' ? 'sec' : 'reps', dist: 'mi', wk: 'mi/wk', pace: '/mi', count: 'strides' }[m];
 
   let hero = '';
   if (lastP) {

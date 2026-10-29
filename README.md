@@ -9,7 +9,7 @@ A tiny personal workout log. Open it, see today's workout, tap ✓, done.
 - **Timed stuff** — warm-ups can have reps or a time (e.g. Easy row 2:00) and timed sets (Side Plank) get a Start button that counts down and checks the set off.
 - **Edit workouts** — Settings → Workouts, or ••• during a workout. Rename, change sets/reps/rest/type, edit warm-ups, add or remove exercises. Saved on the device.
 - **Strava** — runs you record in Strava show up automatically (see below).
-- **Progress** — every exercise with a sparkline; tap one for a chart (top set / est. 1RM, or distance / pace for runs), PR, and recent sessions.
+- **Progress** — every exercise with a sparkline; tap one for a chart (top set / est. 1RM; for runs, distance per run, miles per week and pace), PR, and recent sessions.
 - **History** — every workout; tap to edit or delete.
 
 No build step, no backend, no account. Plain HTML/CSS/JS. Data lives on the device (localStorage), with Export/Import backup in Settings (gear icon).
