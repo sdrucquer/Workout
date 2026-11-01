@@ -6,8 +6,8 @@ A tiny personal workout log. Open it, see today's workout, tap ✓, done.
 - **Week strip** — tap a day to see what you did; swipe it (or use the arrows) to go back to earlier weeks.
 - **Bodyweight lifts** — tap the weight column header to switch between added weight (+lb) and assisted (−lb). Set your body weight in Settings and it shows what you're actually moving, plus a Load chart in Progress.
 - **Swapping lifts** — Pull-ups can switch to Lat Pulldown in one tap (each keeps its own history; next time starts with whichever you did last). Any exercise can be swapped for another from its ••• menu, optionally for good.
-- **Timed stuff** — warm-ups can have reps or a time (e.g. Easy row 2:00) and timed sets (Side Plank) get a Start button that counts down and checks the set off.
-- **Edit workouts** — Settings → Workouts, or ••• during a workout. Rename, change sets/reps/rest/type, edit warm-ups, add or remove exercises. Saved on the device.
+- **Timed stuff** — warm-ups can have reps or a time (e.g. Easy row 2:00) and timed sets (Side Plank) get a Start button. It opens a big countdown ring with Pause, Reset and +15s (or tuck it away to a small pill), ticks at 3-2-1, chimes and buzzes at the end, checks the set off and starts your rest. Time fields take plain digits on the number pad: 200 is 2:00, 45 is 0:45.
+- **Edit workouts** — Settings → Workouts, or “Edit this workout” / ••• during a workout. Rename, change sets/reps/rest/type, edit warm-ups, add, remove or reorder exercises. Editing the workout you're doing updates it right away and keeps the sets you've logged; it's also saved for next time.
 - **Progress** — every exercise with a sparkline; tap one for a chart (top set / est. 1RM, or distance / pace for runs), PR, and recent sessions.
 - **History** — every workout; tap to edit or delete.
 

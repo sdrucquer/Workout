@@ -102,6 +102,8 @@ const I = {
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   chev: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+  down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
 };
 
 // ---------- program ----------
@@ -245,7 +247,8 @@ function buildSession(day) {
   const s = {
     id: uid(), day, title: p.title, date: dk(new Date()), start: now, end: null,
     warm: (p.warmup || []).map(x => ({ ...normWarm(x), d: false })),
-    ex: p.ex.map(def => newEx(pickVariant(def, now), now)),
+    // from = the program slot an exercise fills, so edits made mid-workout land on the right one
+    ex: p.ex.map(def => ({ ...newEx(pickVariant(def, now), now), from: def.k })),
   };
   if (n(S.settings.bw)) s.bw = S.settings.bw;
   return s;
@@ -457,6 +460,7 @@ function vWorkout() {
       ${warm}
       ${cards}
       <button class="btn ghost add" data-act="add-ex">${I.plus} Add exercise</button>
+      ${!editing && prog()[w.day] ? `<button class="btn link edit-wk" data-act="edit-active">Edit this workout</button>` : ''}
     </main>
     <footer class="bar"><button class="btn primary xl" data-act="${editing ? 'save-edit' : 'finish'}">${editing ? 'Save Changes' : 'Finish Workout'}</button></footer>`;
 }
@@ -480,7 +484,7 @@ function vCard(ex, i, before) {
     const fields = ex.t === 'strides'
       ? `<label class="fld wide"><input inputmode="numeric" data-f="count" data-i="${i}" value="${esc(r.count)}" placeholder="0" ${done ? 'readonly' : ''}><span>strides</span></label>`
       : `<label class="fld"><input inputmode="decimal" data-f="dist" data-i="${i}" value="${esc(r.dist)}" placeholder="0.0" ${done ? 'readonly' : ''}><span>miles</span></label>
-         <label class="fld"><input inputmode="numeric" data-f="time" data-i="${i}" value="${esc(r.time)}" placeholder="mm:ss" ${done ? 'readonly' : ''}><span>time</span></label>`;
+         <label class="fld"><input class="dur" data-long="1" inputmode="numeric" pattern="[0-9]*" data-f="time" data-i="${i}" value="${esc(r.time)}" placeholder="mm:ss" ${done ? 'readonly' : ''}><span>time</span></label>`;
     const p = paceOf(r);
     return `<section class="card ex ${done ? 'complete' : ''}">${head}
       <div class="run-row ${done ? 'done' : ''}">${fields}
@@ -803,12 +807,14 @@ function openAddExercise(replace = null) {
     const src = old ? { sets: old.sets?.length || 3, target: old.target, rest: old.rest, sec: old.sec } : {};
     const def = { k, n: known?.n || name, t, sets: known?.sets || src.sets || 3, target: known?.target || src.target || '', rest: known?.rest ?? src.rest ?? 90, sec: src.sec || '' };
     const ex = newEx(def, w.start);
+    if (old?.from) ex.from = old.from;
     if (old) {
       w.ex[replace] = ex;
       if (f.keep?.checked) {
         const p = clone(prog()[w.day]), idx = p.ex.findIndex(d => d.k === prog0.k);
         p.ex[idx] = { k: def.k, n: def.n, t: def.t, sets: def.sets, target: def.target, rest: def.rest, ...(def.sec ? { sec: def.sec } : {}), ...(prog0.major ? { major: true } : {}) };
         saveProgramDay(w.day, p);
+        ex.from = def.k;
         toast(`Saved to ${p.title}`);
       }
     } else w.ex.push(ex);
@@ -855,7 +861,7 @@ function vProgram() {
   const warm = p.warmup.map((x, j) => `<div class="pe-warm">
       <input class="text-in" data-pf="wn" data-j="${j}" value="${esc(x.n)}" placeholder="Warm-up">
       <input class="text-in" data-pf="wr" data-j="${j}" value="${esc(x.reps || '')}" placeholder="reps">
-      <input class="text-in" data-pf="ws" data-j="${j}" value="${x.sec ? fmtDur(x.sec) : ''}" placeholder="m:ss" inputmode="numeric">
+      <input class="text-in dur" data-pf="ws" data-j="${j}" value="${x.sec ? fmtDur(x.sec) : ''}" placeholder="m:ss" inputmode="numeric" pattern="[0-9]*" aria-label="Time">
       <button class="icon sm" data-act="pe-wdel" data-j="${j}" aria-label="Remove">✕</button></div>`).join('');
   const exs = p.ex.map((e, j) => {
     const run = ['run', 'strides'].includes(e.t);
@@ -866,7 +872,7 @@ function vProgram() {
       <div class="pe-grid">
         ${run ? '' : `<label><span>Sets</span><input class="text-in" data-pf="es" data-j="${j}" value="${esc(e.sets ?? 3)}" inputmode="numeric"></label>`}
         <label class="${run ? 'wide' : ''}"><span>${e.t === 't' ? 'Target (sec)' : 'Target reps'}</span><input class="text-in" data-pf="et" data-j="${j}" value="${esc(e.target || '')}" placeholder="${e.t === 't' ? '30–45s' : '8–10'}"></label>
-        ${run ? '' : `<label><span>Rest</span><input class="text-in" data-pf="er" data-j="${j}" value="${fmtDur(e.rest ?? 90)}" inputmode="numeric"></label>`}
+        ${run ? '' : `<label><span>Rest</span><input class="text-in dur" data-pf="er" data-j="${j}" value="${fmtDur(e.rest ?? 90)}" placeholder="m:ss" inputmode="numeric" pattern="[0-9]*"></label>`}
       </div>
       ${e.alts?.length ? `<p class="muted small">Can switch to ${esc(e.alts.map(a => a.n).join(', '))} during the workout.</p>` : ''}
     </section>`;
@@ -882,7 +888,8 @@ function vProgram() {
         <label><span>Name</span><input class="text-in" data-pf="title" value="${esc(p.title)}"></label>
         <label><span>Short name</span><input class="text-in" data-pf="short" value="${esc(p.short)}"></label>
       </section>
-      <p class="eyebrow">Warm-up · reps and time are optional</p>
+      ${S.active?.day === ui.pd ? '<p class="pe-live">You’re doing this workout now. Saving updates it right away and keeps the sets you’ve logged.</p>' : ''}
+      <p class="eyebrow">Warm-up · reps, and time as digits (200 = 2:00)</p>
       <section class="card">${warm || '<p class="muted small">No warm-up.</p>'}
         <button class="btn link" data-act="pe-wadd">${I.plus} Add warm-up</button></section>
       <p class="eyebrow">Exercises</p>
@@ -913,61 +920,159 @@ function saveProgram() {
     e.k = k; used.add(k);
     if (!['run', 'strides'].includes(e.t)) e.sets = Math.max(1, Math.round(n(e.sets)) || 3);
   }
+  const old = prog()[d];
   saveProgramDay(d, p);
-  toast(S.active?.day === d ? 'Saved · applies next time you start it' : 'Saved');
+  if (S.active?.day === d) { applyToActive(old, p); save(); toast('Saved · updated this workout too'); }
+  else toast('Saved');
   leaveProgram();
 }
 
-// ---------- rest timer ----------
+// Bring the workout in progress in line with an edited program: new order, sets,
+// targets and warm-ups, while keeping everything already checked off, skipped
+// exercises, and exercises added or swapped in during the workout.
+function applyToActive(oldDef, def) {
+  const w = S.active, oldKeys = new Set((oldDef?.ex || []).map(e => e.k));
+  w.title = def.title;
+
+  // warm-ups: keep check marks, matching by name first, then by position
+  const prevW = w.warm, usedW = new Set();
+  const nextW = (def.warmup || []).map(x => ({ ...normWarm(x), d: false }));
+  nextW.forEach(x => {
+    const j = prevW.findIndex((y, k) => !usedW.has(k) && y.n.trim().toLowerCase() === x.n.toLowerCase());
+    if (j >= 0) { usedW.add(j); x.d = prevW[j].d; x.matched = true; }
+  });
+  nextW.forEach((x, j) => {
+    if (!x.matched && prevW[j] && !usedW.has(j)) { usedW.add(j); x.d = prevW[j].d; }
+    delete x.matched;
+  });
+  w.warm = nextW;
+
+  // exercises
+  const slot = ex => ex.from ?? (oldKeys.has(ex.base || ex.k) ? ex.base || ex.k : null);
+  const used = new Set();
+  const out = def.ex.map(d => {
+    const ex = w.ex.find(e => !used.has(e) && slot(e) === d.k);
+    if (!ex) return { ...newEx(pickVariant(d, w.start), w.start), from: d.k };
+    used.add(ex);
+    return syncEx(ex, d, w.start);
+  });
+  // keep the rest when they were added during the workout, or already have sets logged
+  w.ex.forEach((ex, i) => {
+    if (used.has(ex)) return;
+    const s = slot(ex);
+    if (s != null && oldKeys.has(s) && !hasLogged(ex)) return; // removed from the program, nothing logged
+    let prev = null;
+    for (let k = i - 1; k >= 0 && !prev; k--) if (out.includes(w.ex[k])) prev = w.ex[k];
+    out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, ex);
+    used.add(ex);
+  });
+  w.ex = out;
+}
+const hasLogged = ex => !!(ex.run ? ex.run.d : ex.sets?.some(s => s.d));
+function syncEx(ex, d, start) {
+  const alt = d.alts?.find(a => a.k === ex.k);
+  const v = ex.k === d.k ? d : alt ? variant(d, alt) : null; // null: swapped for something else
+  if (v && v.t !== ex.t) {
+    if (!hasLogged(ex)) return { ...newEx(v, start), from: d.k };
+  } else if (v) ex.n = v.n;
+  ex.target = d.target || '';
+  ex.rest = d.rest ?? 90;
+  ex.sec = d.sec || '';
+  ex.note = d.note || '';
+  if (ex.sets && d.sets) {
+    const want = Math.max(1, Math.round(n(d.sets)));
+    while (ex.sets.length < want) { const l = ex.sets.at(-1); ex.sets.push({ w: l?.w ?? '', r: l?.r ?? '', d: false }); }
+    while (ex.sets.length > want && !ex.sets.at(-1).d) ex.sets.pop();
+  }
+  ex.from = d.k;
+  return ex;
+}
+
+// ---------- rest timer + work timer ----------
 let audio;
-function beep() {
+function tone(freq = 880, dur = 0.5, at = 0, vol = 0.3) {
   try {
     audio ||= new (window.AudioContext || window.webkitAudioContext)();
-    const o = audio.createOscillator(), g = audio.createGain();
-    o.frequency.value = 880; g.gain.setValueAtTime(0.0001, audio.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.3, audio.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.5);
-    o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + 0.5);
+    const o = audio.createOscillator(), g = audio.createGain(), t0 = audio.currentTime + at;
+    o.frequency.value = freq; g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(audio.destination); o.start(t0); o.stop(t0 + dur);
   } catch {}
-  navigator.vibrate?.([200, 100, 200]);
 }
+function beep() { tone(); navigator.vibrate?.([200, 100, 200]); }
+// end of a timed set: three rising chimes and a long buzz
+function chime() { tone(784, 0.25, 0); tone(988, 0.25, 0.22); tone(1319, 0.6, 0.44, 0.35); navigator.vibrate?.([300, 120, 300, 120, 500]); }
+function wakeAudio() { try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {} }
+// keep the screen on while a timed set runs
+let lock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !lock) { lock = await navigator.wakeLock?.request('screen'); lock?.addEventListener?.('release', () => { lock = null; }); }
+    else if (!on && lock) { await lock.release(); lock = null; }
+  } catch { lock = null; }
+}
+
 function startRest(sec) {
   if (!S.settings.rest || !sec) return;
-  try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {}
+  wakeAudio();
+  keepAwake(false);
   ui.rest = { end: Date.now() + sec * 1000, total: sec, rung: false };
   renderRest();
 }
-// Countdown for a timed set or warm-up; when it ends the set (or warm-up) is checked off.
+// Countdown for a timed set or warm-up, shown as a big ring. When it ends the
+// set (or warm-up) is checked off and the rest timer starts.
 function startWork(sec, work) {
   if (!sec) return;
-  try { audio ||= new (window.AudioContext || window.webkitAudioContext)(); audio.resume(); } catch {}
-  ui.rest = { end: Date.now() + sec * 1000, total: sec, rung: false, work };
-  renderRest();
+  wakeAudio();
+  keepAwake(true);
+  ui.rest = { end: Date.now() + sec * 1000, total: sec, rung: false, work, paused: null, min: false, done: false, cue: null };
+  renderRest(true);
 }
+const workLeft = r => (r.paused != null ? r.paused : r.end - Date.now());
 function finishWork(r) {
-  const w = S.active, k = r.work;
-  ui.rest = null;
-  beep();
-  if (!w) return;
-  if (k.warm != null) { if (w.warm[k.warm]) w.warm[k.warm].d = true; save(); }
-  else {
-    const ex = w.ex[k.i], s = ex?.sets?.[k.j];
-    if (s) { s.r = String(Math.round(r.total)); s.d = true; save(); startRest(ex.rest); }
-  }
+  const k = r.work;
+  r.done = true; r.paused = null; r.end = Date.now();
+  chime();
+  keepAwake(false);
+  if (k.warm) k.warm.d = true;
+  else if (k.set) { k.set.r = String(Math.round(r.total)); k.set.d = true; }
+  if (S.active) save();
   if (ui.screen === 'workout' && !ui.edit) render();
+  else renderRest(true);
+  // show "Done" for a moment, then move on to rest
+  setTimeout(() => {
+    if (ui.rest !== r) return;
+    ui.rest = null;
+    if (k.ex && S.active?.ex.includes(k.ex)) startRest(k.ex.rest);
+    renderRest(true);
+  }, 2500);
 }
-function renderRest() {
+
+const $timer = document.getElementById('timer');
+const RING = 2 * Math.PI * 92;
+function renderRest(rebuild = false) {
   const r = ui.rest;
-  if (r?.work && Date.now() >= r.end) return finishWork(r);
-  if (!r || ui.screen !== 'workout' || ui.edit) { $rest.className = ''; $rest.innerHTML = ''; return; }
-  const left = Math.ceil((r.end - Date.now()) / 1000);
-  if (r.work) {
-    $rest.className = 'show work';
-    $rest.innerHTML = `<div class="rest-bar" style="transform:scaleX(${Math.max(0, Math.min(1, left / r.total))})"></div>
-      <span class="rest-t">${esc(r.work.label)} ${fmtDur(left)}</span>
-      <button data-act="rest-add">+15</button><button data-act="rest-x" aria-label="Stop">✕</button>`;
+  const visible = r && ui.screen === 'workout' && !ui.edit;
+  if (r?.work && !r.done && r.paused == null && Date.now() >= r.end) return finishWork(r);
+  // big timer
+  if (visible && r.work && !r.min) {
+    $rest.className = ''; $rest.innerHTML = '';
+    if (rebuild || $timer.dataset.state !== timerState(r)) buildTimer(r);
+    tickTimer(r);
     return;
   }
+  if ($timer.className) { $timer.className = ''; $timer.innerHTML = ''; $timer.dataset.state = ''; }
+  if (!visible) { $rest.className = ''; $rest.innerHTML = ''; return; }
+  if (r.work) {
+    const left = Math.max(0, Math.ceil(workLeft(r) / 1000));
+    $rest.className = 'show work';
+    $rest.innerHTML = `<div class="rest-bar" style="transform:scaleX(${r.done ? 1 : Math.max(0, Math.min(1, left / r.total))})"></div>
+      <button class="rest-t" data-act="tm-max">${esc(r.work.label)} ${r.done ? '· Done' : r.paused != null ? `${fmtDur(left)} · Paused` : fmtDur(left)}</button>
+      ${r.done ? '' : `<button data-act="tm-pause">${r.paused != null ? 'Go' : 'Pause'}</button>`}<button data-act="rest-x" aria-label="Stop">✕</button>`;
+    return;
+  }
+  const left = Math.ceil((r.end - Date.now()) / 1000);
   if (left <= 0 && !r.rung) { r.rung = true; beep(); }
   if (left <= -4) { ui.rest = null; $rest.className = ''; $rest.innerHTML = ''; return; }
   const pct = Math.max(0, Math.min(1, left / r.total));
@@ -976,6 +1081,37 @@ function renderRest() {
     <span class="rest-t">${left > 0 ? `Rest ${fmtDur(left)}` : 'Go'}</span>
     <button data-act="rest-add">+30</button><button data-act="rest-x" aria-label="Dismiss">✕</button>`;
 }
+const timerState = r => (r.done ? 'done' : r.paused != null ? 'paused' : 'run');
+function buildTimer(r) {
+  const st = timerState(r);
+  $timer.dataset.state = st;
+  $timer.className = `show ${st}`;
+  $timer.innerHTML = `<div class="tm-top">
+      <button class="icon" data-act="tm-min" aria-label="Minimize">${I.down}</button>
+      <p class="eyebrow">${esc(r.work.label)}</p>
+      <button class="icon" data-act="rest-x" aria-label="Stop timer">✕</button>
+    </div>
+    <div class="tm-ring">
+      <svg viewBox="0 0 200 200" aria-hidden="true"><circle class="tm-track" cx="100" cy="100" r="92"/><circle class="tm-prog" cx="100" cy="100" r="92" stroke-dasharray="${RING}" stroke-dashoffset="0"/></svg>
+      <div class="tm-num">${st === 'done' ? `<i class="tm-check">${I.check}</i><b class="tm-done">Done</b>` : '<b data-tm="t"></b>'}<span data-tm="s"></span></div>
+    </div>
+    <p class="tm-sub">${esc(r.work.sub || '')}</p>
+    <div class="tm-btns">${st === 'done'
+      ? `<button class="btn primary xl" data-act="rest-x">${r.work.ex?.rest && S.settings.rest ? 'Start rest' : 'Close'}</button>`
+      : `<button class="tm-b" data-act="tm-reset">Reset</button>
+         <button class="tm-b main" data-act="tm-pause">${st === 'paused' ? `${I.play}Resume` : `${I.pause}Pause`}</button>
+         <button class="tm-b" data-act="rest-add">+15s</button>`}</div>`;
+}
+function tickTimer(r) {
+  const ms = Math.max(0, workLeft(r)), left = Math.ceil(ms / 1000);
+  const t = $timer.querySelector('[data-tm=t]'), sub = $timer.querySelector('[data-tm=s]'), ring = $timer.querySelector('.tm-prog');
+  if (t) t.textContent = fmtDur(left);
+  if (sub) sub.textContent = r.done ? `${fmtDur(r.total)} held` : r.paused != null ? 'Paused' : `of ${fmtDur(r.total)}`;
+  ring?.setAttribute('stroke-dashoffset', r.done ? 0 : (RING * (1 - Math.min(1, ms / (r.total * 1000)))).toFixed(1));
+  $timer.classList.toggle('last', !r.done && left <= 3);
+  // 3-2-1 ticks before the end
+  if (!r.done && r.paused == null && left <= 3 && left >= 1 && r.cue !== left) { r.cue = left; tone(660, 0.12, 0, 0.25); }
+}
 setInterval(() => {
   if (ui.screen === 'workout' && S.active && !ui.edit) {
     const el = $app.querySelector('[data-el=elapsed]');
@@ -983,6 +1119,15 @@ setInterval(() => {
   }
   if (ui.rest) renderRest();
 }, 1000);
+// smooth ring while the big timer is on screen
+(function frame() {
+  const r = ui.rest;
+  if (r?.work && !r.min && !r.done && $timer.className) {
+    if (r.paused == null && Date.now() >= r.end) renderRest(); else tickTimer(r);
+  }
+  requestAnimationFrame(frame);
+})();
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ui.rest?.work && !ui.rest.done && ui.rest.paused == null) keepAwake(true); });
 
 // ---------- actions ----------
 function persist() { if (!ui.edit) save(); }
@@ -1108,13 +1253,13 @@ const actions = {
       ]);
     }
   },
-  'warm-timer': b => { const x = S.active?.warm[+b.dataset.j]; if (x?.sec) startWork(x.sec, { warm: +b.dataset.j, label: x.n }); },
+  'warm-timer': b => { const x = S.active?.warm[+b.dataset.j]; if (x?.sec) startWork(x.sec, { warm: x, label: x.n, sub: 'Warm-up' }); },
   'set-timer': b => {
     const i = +b.dataset.i, j = +b.dataset.j, ex = S.active?.ex[i], s = ex?.sets[j];
     if (!s) return;
     const sec = Math.round(n(s.r)) || firstNum(ex.target) || 30;
     s.r = String(sec);
-    startWork(sec, { i, j, label: 'Hold' });
+    startWork(sec, { ex, set: s, label: ex.n, sub: `Set ${j + 1} of ${ex.sets.length}` });
     persist(); render();
   },
   assist: b => { const ex = cur().ex[+b.dataset.i]; ex.assist = !ex.assist; persist(); render(); },
@@ -1188,7 +1333,7 @@ const actions = {
       if (o.k === ex.k) continue;
       items.push({ label: `Switch to ${o.n}`, fn: () => {
         if (ex.sets?.some(s => s.d) && !confirm(`Switch to ${o.n}? Sets you checked off here will be cleared.`)) return;
-        w.ex[i] = newEx(variant(base, o), w.start);
+        w.ex[i] = { ...newEx(variant(base, o), w.start), ...(ex.from ? { from: ex.from } : {}) };
       } });
     }
     items.push({ label: 'Swap for another exercise', fn: () => openAddExercise(i) });
@@ -1221,11 +1366,35 @@ const actions = {
   export: exportData,
   import: importData,
   'rest-add': () => {
-    const r = ui.rest; if (!r) return;
+    const r = ui.rest; if (!r || r.done) return;
     const by = r.work ? 15 : 30;
-    r.end = Math.max(r.end, Date.now()) + by * 1000; r.total += by; r.rung = false; renderRest();
+    if (r.paused != null) r.paused += by * 1000;
+    else r.end = Math.max(r.end, Date.now()) + by * 1000;
+    r.total += by; r.rung = false; r.cue = null; renderRest();
   },
-  'rest-x': () => { ui.rest = null; renderRest(); },
+  'rest-x': () => {
+    const r = ui.rest;
+    ui.rest = null;
+    keepAwake(false);
+    // closing a finished timed set goes straight to rest
+    if (r?.done && r.work.ex && S.active?.ex.includes(r.work.ex)) startRest(r.work.ex.rest);
+    renderRest(true);
+  },
+  'tm-pause': () => {
+    const r = ui.rest; if (!r?.work || r.done) return;
+    wakeAudio();
+    if (r.paused != null) { r.end = Date.now() + r.paused; r.paused = null; keepAwake(true); }
+    else { r.paused = Math.max(0, r.end - Date.now()); keepAwake(false); }
+    renderRest(true);
+  },
+  'tm-reset': () => {
+    const r = ui.rest; if (!r?.work || r.done) return;
+    if (r.paused != null) r.paused = r.total * 1000; else r.end = Date.now() + r.total * 1000;
+    r.cue = null; renderRest(true);
+  },
+  'tm-min': () => { if (ui.rest?.work) { ui.rest.min = true; renderRest(true); } },
+  'tm-max': () => { if (ui.rest?.work) { ui.rest.min = false; renderRest(true); } },
+  'edit-active': () => openProgram(S.active.day, 'workout'),
 };
 
 document.addEventListener('click', e => {
@@ -1234,6 +1403,39 @@ document.addEventListener('click', e => {
   const fn = actions[b.dataset.act];
   if (fn) { e.preventDefault(); fn(b); }
 });
+
+// Time fields fill from the right like a microwave: 2 → 0:02, 20 → 0:20, 200 → 2:00.
+// The iPhone number pad has no ":", so it's added for you.
+const durDigits = v => String(v ?? '').replace(/\D/g, '').replace(/^0+/, '');
+function fmtDigits(d, long) {
+  d = d.replace(/^0+/, '').slice(0, long ? 6 : 4); // extra digits are ignored
+  if (!d) return '';
+  const p = d.padStart(3, '0');
+  if (long && d.length > 4) return `${p.slice(0, -4)}:${p.slice(-4, -2)}:${p.slice(-2)}`;
+  return `${+p.slice(0, -2)}:${p.slice(-2)}`;
+}
+function setDur(el, digits) {
+  el.value = fmtDigits(digits, !!el.dataset.long);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+}
+document.addEventListener('focusin', e => { if (e.target.matches?.('input.dur')) e.target.dataset.fresh = '1'; });
+document.addEventListener('beforeinput', e => {
+  const el = e.target;
+  if (!el.matches?.('input.dur') || el.readOnly) return;
+  e.preventDefault();
+  const fresh = el.dataset.fresh === '1';
+  el.dataset.fresh = '';
+  let d = durDigits(el.value);
+  if (e.inputType.startsWith('insert')) d = durDigits((fresh ? '' : d) + String(e.data ?? e.dataTransfer?.getData('text') ?? '').replace(/\D/g, ''));
+  else if (e.inputType === 'deleteContentBackward') d = d.slice(0, -1);
+  else if (e.inputType.startsWith('delete')) d = '';
+  setDur(el, d);
+});
+// fallback for keyboards that skip beforeinput (dictation, autofill)
+document.addEventListener('input', e => {
+  const el = e.target;
+  if (e.isTrusted && el.matches?.('input.dur') && /[^\d:]/.test(el.value)) setDur(el, durDigits(el.value));
+}, true);
 
 // typing: update state in place, no re-render (keeps focus and keyboard)
 $app.addEventListener('focusin', e => {
