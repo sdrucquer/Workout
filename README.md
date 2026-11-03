@@ -2,7 +2,7 @@
 
 A tiny personal workout log. Open it, see today's workout, tap ✓, done.
 
-- **Today** — the next workout in your cycle, one big Start button. If you skip or swap a day, it picks up from the last workout you actually did (Push → Speed → Pull → Legs), so the order stays right. Runs and rest days stay on the calendar. Weights and reps prefill from last time; tap ✓ to log a set (starts a rest timer). Change set 1's weight and the rest of the sets follow.
+- **Today** — the next workout in your cycle, one big Start button. If you skip or swap a day, it picks up from the last workout you actually did (Push → Speed → Pull → Legs), so the order stays right. Runs and rest days stay on the calendar. Weights and reps prefill from last time; tap ✓ to log a set (starts a rest timer). Change set 1's weight and the rest of the sets follow. Each box shows a small "last …" with what you did on that same set last time, and the line under the sets compares only the sets you've checked, set by set ("Matched last time", "Set 2 +20 lb vs last time").
 - **Week strip** — tap a day to see what you did; swipe it (or use the arrows) to go back to earlier weeks.
 - **Bodyweight lifts** — tap the weight column header to switch between added weight (+lb) and assisted (−lb). Set your body weight in Settings and it shows what you're actually moving, plus a Load chart in Progress.
 - **Swapping lifts** — Pull-ups can switch to Lat Pulldown in one tap (each keeps its own history; next time starts with whichever you did last). Any exercise can be swapped for another from its ••• menu, optionally for good.
