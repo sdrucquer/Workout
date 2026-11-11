@@ -472,7 +472,11 @@ function vCard(ex, i, before) {
     return `<section class="card ex skipped"><div class="ex-top"><div><h2>${esc(ex.n)}</h2><p class="sub">Skipped</p></div>
       <button class="btn link" data-act="unskip" data-i="${i}">Undo</button></div></section>`;
   }
-  const lastTxt = last ? (ex.run ? fmtRun(last.ex) : fmtSets(last.ex, doneSets(last.ex))) : '';
+  // Set rows show last time's same set in place, so the header only lists last time's sets
+  // when it's a run or when there were more sets than today's rows can show.
+  const lastSets = last && !ex.run ? doneSets(last.ex) : [];
+  const lastTxt = !last ? '' : ex.run ? fmtRun(last.ex)
+    : lastSets.length > (ex.sets || []).length ? fmtSets(last.ex, lastSets) : '';
   const head = `<div class="ex-top"><div>
       <h2>${esc(ex.n)}</h2>
       <p class="sub">${ex.sets ? `${ex.sets.length} × ` : ''}${esc(ex.target)}${lastTxt ? ` <span class="dot">·</span> Last: ${esc(lastTxt)}` : ''}</p>
@@ -497,14 +501,18 @@ function vCard(ex, i, before) {
   // Bodyweight lifts: tap the column header to switch between added (+) and assisted (−) weight.
   const unitLbl = ex.t === 'w' ? unit()
     : isBW ? `<button class="mode" data-act="assist" data-i="${i}">${ex.assist ? `−${unit()} assist` : `+${unit()}`} ⇄</button>` : '';
+  // tiny "last …" caption inside each box: what you did on this same set last time
+  const cap = t => (t === '' ? '' : `<small class="was">last ${esc(t)}</small>`);
   const rows = ex.sets.map((s, j) => {
-    const pr = isPR(ex, j, before);
+    const pr = isPR(ex, j, before), l = lastSets[j];
+    const lw = !l ? '' : isBW ? (sw(last.ex, l) ? sgn(sw(last.ex, l)) : 'BW') : fw(n(l.w));
+    const lr = !l ? '' : fw(n(l.r)) + (ex.t === 't' ? 's' : '');
     const timer = !isW && !s.d && !ui.edit
       ? `<button class="timer-btn in" data-act="set-timer" data-i="${i}" data-j="${j}">${I.play}Start</button>` : '<span></span>';
     return `<div class="set ${s.d ? 'done' : ''} ${pr ? 'is-pr' : ''}">
       <span class="sn">${pr ? '<b>PR</b>' : j + 1}</span>
-      ${isW ? `<input class="in" inputmode="decimal" data-f="w" data-i="${i}" data-j="${j}" value="${esc(s.w)}" placeholder="${isBW ? (ex.assist ? '0' : 'BW') : '0'}" aria-label="${isBW && ex.assist ? 'Assistance' : 'Weight'}">` : timer}
-      <input class="in" inputmode="numeric" data-f="r" data-i="${i}" data-j="${j}" value="${esc(s.r)}" placeholder="0" aria-label="${ex.t === 't' ? 'Seconds' : 'Reps'}">
+      ${isW ? `<span class="cell"><input class="in ${l ? 'has-was' : ''}" inputmode="decimal" data-f="w" data-i="${i}" data-j="${j}" value="${esc(s.w)}" placeholder="${isBW ? (ex.assist ? '0' : 'BW') : '0'}" aria-label="${isBW && ex.assist ? 'Assistance' : 'Weight'}">${cap(lw)}</span>` : timer}
+      <span class="cell"><input class="in ${l ? 'has-was' : ''}" inputmode="numeric" data-f="r" data-i="${i}" data-j="${j}" value="${esc(s.r)}" placeholder="0" aria-label="${ex.t === 't' ? 'Seconds' : 'Reps'}">${cap(lr)}</span>
       <button class="chk ${s.d ? 'on' : ''}" data-act="set-done" data-i="${i}" data-j="${j}" aria-label="Done">${I.check}</button>
     </div>`;
   }).join('');
@@ -518,29 +526,70 @@ function vCard(ex, i, before) {
       nudge = `<button class="nudge" data-act="bump" data-i="${i}">Hit ${top} reps every set last time · <b>Add ${inc()} ${unit()}</b></button>`;
   }
 
-  // delta vs last time, once something is logged
-  let foot = '';
-  const ts = topSet(ex), lt = last && topSet(last.ex);
-  if (ts && lt) {
-    const dw = sw(ex, ts) - sw(last.ex, lt), dr = n(ts.r) - n(lt.r);
-    const sfx = ex.t === 't' ? 's' : ' reps';
-    if (dw && isW) foot = `<span class="${dw > 0 ? 'up' : ''}">${dw > 0 ? '+' : '−'}${fw(Math.abs(dw))} ${unit()} vs last time</span>`;
-    else if (dr) foot = `<span class="${dr > 0 ? 'up' : ''}">${dr > 0 ? '+' : '−'}${fw(Math.abs(dr))}${sfx} vs last time</span>`;
-    else foot = '<span>Matched last time</span>';
-  }
+  // vs last time: only sets you've checked, each against the same set number last time
+  const foot = vsLast(ex, last);
   // with body weight known, show what you're actually moving on a bodyweight lift
   const bwv = bwOf(cur());
+  let load = '';
   if (isBW && bwv) {
     const s0 = ex.sets.find(s => s.d) || ex.sets[0];
     const add = s0 ? sw(ex, s0) : 0;
-    foot += `<span class="load">${foot ? ' · ' : ''}Moving ${fw(bwv + add)} ${unit()}${add ? ` (${fw(bwv)} ${add > 0 ? '+' : '−'} ${fw(Math.abs(add))})` : ''}</span>`;
+    load = `<span class="load">${foot ? ' · ' : ''}Moving ${fw(bwv + add)} ${unit()}${add ? ` (${fw(bwv)} ${add > 0 ? '+' : '−'} ${fw(Math.abs(add))})` : ''}</span>`;
   }
 
   return `<section class="card ex">${head}${nudge}
     <div class="set hdr"><span>Set</span>${isW ? `<span>${unitLbl}</span>` : '<span>timer</span>'}<span>${ex.t === 't' ? 'sec' : 'reps'}</span><span></span></div>
     ${rows}
-    ${foot ? `<p class="foot">${foot}</p>` : ''}
+    ${foot || load ? `<p class="foot">${foot}${load}</p>` : ''}
   </section>`;
+}
+
+// "Vs last time" line for a set-based exercise. Compares only checked sets, each against
+// the same set number last time, so an unchecked heavier set never counts against you.
+// Returns '' until a set is checked.
+function vsLast(ex, last) {
+  if (!last || !ex.sets.some(s => s.d)) return '';
+  const ls = doneSets(last.ex), isW = ex.t !== 't';
+  const wu = ` ${unit()}`, rs = ex.t === 't' ? 's' : ' reps';
+  const signed = (d, sfx) => `${d > 0 ? '+' : '−'}${fw(Math.abs(d))}${sfx}`;
+  const changed = [];
+  let paired = 0, extra = 0;
+  ex.sets.forEach((s, j) => {
+    if (!s.d) return;
+    const l = ls[j];
+    if (!l) { extra++; return; }
+    paired++;
+    const dw = isW ? sw(ex, s) - sw(last.ex, l) : 0, dr = n(s.r) - n(l.r);
+    if (dw || dr) changed.push({ j, dw, dr });
+  });
+  // once every set is checked, also say if you did more or fewer sets than last time
+  const fewer = ex.sets.every(s => s.d) ? Math.max(0, ls.length - ex.sets.length) : 0;
+  const dSets = extra - fewer;
+  const setsTxt = dSets ? signed(dSets, Math.abs(dSets) === 1 ? ' set' : ' sets') : '';
+  const what = c => [c.dw ? signed(c.dw, wu) : '', c.dr ? signed(c.dr, rs) : ''].filter(Boolean).join(', ');
+  // heavier counts as up (for timed holds, longer counts as up)
+  const dir = c => Math.sign(isW && c.dw ? c.dw : c.dr);
+  let txt, d = 0;
+  if (!changed.length) {
+    if (!paired) return `<span class="${dSets > 0 ? 'up' : ''}">${setsTxt} vs last time</span>`;
+    txt = 'Matched last time';
+    if (setsTxt) txt += ` · ${setsTxt}`;
+    return `<span class="${dSets > 0 ? 'up' : ''}">${txt}</span>`;
+  }
+  const same = changed.every(c => c.dw === changed[0].dw && c.dr === changed[0].dr);
+  if (same && changed.length === paired && paired > 1) {
+    txt = `${what(changed[0])} every set`; d = dir(changed[0]);
+  } else if (changed.length <= 2) {
+    txt = changed.map(c => `Set ${c.j + 1} ${what(c)}`).join(' · ');
+    d = changed.every(c => dir(c) > 0) ? 1 : changed.every(c => dir(c) < 0) ? -1 : 0;
+  } else {
+    const up = changed.filter(c => dir(c) > 0).length, down = changed.length - up;
+    txt = [up ? `Up on ${up} set${up > 1 ? 's' : ''}` : '', down ? `down on ${down}` : ''].filter(Boolean).join(', ');
+    txt = txt[0].toUpperCase() + txt.slice(1);
+    d = down ? (up ? 0 : -1) : 1;
+  }
+  if (setsTxt) txt += ` · ${setsTxt}`;
+  return `<span class="${d > 0 ? 'up' : ''}">${txt} vs last time</span>`;
 }
 
 // ----- summary -----
