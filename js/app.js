@@ -3,7 +3,7 @@ const DEFAULTS = { ...PROGRAM, ...HOME, ...TRAVEL };
 
 // ---------- storage ----------
 const LS = 'wt1';
-const DEF_SETTINGS = { theme: 'auto', unit: 'lb', rest: true, bw: '', where: 'school' };
+const DEF_SETTINGS = { theme: 'auto', unit: 'lb', rest: true, bw: '', where: 'school', splash: true };
 // Stored state only ever gains fields (program, settings.bw, …) and stays
 // v: 1, so an older copy of the app can still read it without wiping anything.
 
@@ -270,6 +270,11 @@ function buildSession(day) {
   return s;
 }
 const cur = () => ui.edit || S.active;
+const isNeon = () => S.settings.theme === 'neon';
+function weekCount() {
+  const now = new Date(), mon = new Date(now); mon.setDate(now.getDate() - ((now.getDay() + 6) % 7)); mon.setHours(0, 0, 0, 0);
+  return S.sessions.filter(s => s.start >= mon.getTime()).length;
+}
 // The program entry an exercise in a session came from.
 const baseDef = (w, ex) => prog()[w.day]?.ex.find(d => d.k === (ex.base || ex.k));
 
@@ -527,7 +532,8 @@ function vCard(ex, i, before) {
     const lr = !l ? '' : fw(n(l.r)) + (ex.t === 't' ? 's' : '');
     const timer = !isW && !s.d && !ui.edit
       ? `<button class="timer-btn in" data-act="set-timer" data-i="${i}" data-j="${j}">${I.play}Start</button>` : '<span></span>';
-    return `<div class="set ${s.d ? 'done' : ''} ${pr ? 'is-pr' : ''}">
+    const fl = s.d && ui.flash && ui.flash.i === i && ui.flash.j === j && Date.now() - ui.flash.at < 1200 && !ui.edit;
+    return `<div class="set ${s.d ? 'done' : ''} ${pr ? 'is-pr' : ''} ${fl ? 'flash' : ''}">${fl ? '<b class="plus" aria-hidden="true">+1 set</b>' : ''}
       <span class="sn">${pr ? '<b>PR</b>' : j + 1}</span>
       ${isW ? `<span class="cell"><input class="in ${l ? 'has-was' : ''}" inputmode="decimal" data-f="w" data-i="${i}" data-j="${j}" value="${esc(s.w)}" placeholder="${isBW ? (ex.assist ? '0' : 'BW') : '0'}" aria-label="${isBW && ex.assist ? 'Assistance' : 'Weight'}">${cap(lw)}</span>` : timer}
       <span class="cell"><input class="in ${l ? 'has-was' : ''}" inputmode="numeric" data-f="r" data-i="${i}" data-j="${j}" value="${esc(s.r)}" placeholder="0" aria-label="${ex.t === 't' ? 'Seconds' : 'Reps'}">${cap(lr)}</span>
@@ -634,14 +640,27 @@ function vSummary() {
   const stats = w.ex.some(e => e.t === 'run' && hasData(e))
     ? tile(fmtRun(w.ex.find(e => e.t === 'run')).split(' · ')[0], 'Distance') + minTile
     : minTile + tile(sets, 'Sets') + (vol ? tile(Math.round(vol).toLocaleString(), `${unit()} volume`) : '');
-  return `<main class="page summary">
-    <div class="done-badge">${I.check}</div>
+  const neon = isNeon(), wk = Math.min(5, weekCount());
+  const head = neon
+    ? `<div class="nc-burst" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+       <div class="nc-stamp"><h1>Workout<br>complete</h1></div>
+       <p class="eyebrow center gold nc-sub">${esc(w.title)}</p>`
+    : `<div class="done-badge">${I.check}</div>
     <p class="eyebrow center">Workout complete</p>
-    <h1 class="big center">${esc(w.title)}</h1>
+    <h1 class="big center">${esc(w.title)}</h1>`;
+  const prBlock = !prs.length ? '' : neon
+    ? prs.map(([a, b]) => `<div class="nc-best"><span>New best</span><b>${esc(a)} · ${esc(b)}</b></div>`).join('')
+    : `<section class="card"><p class="eyebrow gold">Personal records</p>${prs.map(([a, b]) =>
+      `<div class="row"><span>${esc(a)}</span><b class="pr">${esc(b)}</b></div>`).join('')}</section>`;
+  const weekBlock = neon && w.date === dk(new Date())
+    ? `<section class="card nc-week"><div class="row"><span class="eyebrow">This week</span><b>${wk} / 5</b></div>
+       <div class="nc-bars">${Array.from({ length: 5 }, (_, i) => `<i class="${i < wk ? (i === wk - 1 ? 'new' : 'on') : ''}"></i>`).join('')}</div>
+       <p class="muted small">${wk >= 5 ? 'Week fully lit.' : wk === 4 ? 'One more and the week is fully lit.' : `${5 - wk} more to light up the week.`}</p></section>` : '';
+  return `<main class="page summary ${neon ? 'nc' : ''}">
+    ${head}
     <div class="tiles">${stats}</div>
     ${dur < 10 ? '<p class="muted small center">Logged it afterwards? Tap Minutes to set how long it really took.</p>' : ''}
-    ${prs.length ? `<section class="card"><p class="eyebrow gold">Personal records</p>${prs.map(([a, b]) =>
-      `<div class="row"><span>${esc(a)}</span><b class="pr">${esc(b)}</b></div>`).join('')}</section>` : ''}
+    ${prBlock}${weekBlock}
     ${deltas.length ? `<section class="card"><p class="eyebrow">Vs last time</p>${deltas.map(([a, d]) =>
       `<div class="row"><span>${esc(a)}</span><b class="${d > 0 ? 'up' : 'muted'}">${d > 0 ? '+' : '−'}${fw(Math.abs(d))} ${unit()}</b></div>`).join('')}</section>` : ''}
     <button class="btn primary xl" data-act="summary-done">Done</button>
@@ -943,7 +962,8 @@ function openSettings() {
   ui.sheet = [];
   $sheet.innerHTML = `<div class="sheet-bg" data-act="sheet-x"></div><div class="sheet-panel">
     <p class="eyebrow center">Settings</p>
-    <p class="lbl">Appearance</p>${seg('theme', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark']])}
+    <p class="lbl">Appearance</p>${seg('theme', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark'], ['neon', 'Neon']])}
+    ${isNeon() ? `<p class="lbl">Opening screen · phone home screen when the app opens</p>${seg('splash', [[true, 'On'], [false, 'Off']])}` : ''}
     <p class="lbl">Units</p>${seg('unit', [['lb', 'lb'], ['kg', 'kg']])}
     <p class="lbl">Body weight · ${unit()}</p>
     <input class="text-in" data-sf="bw" inputmode="decimal" placeholder="e.g. 180" value="${esc(st.bw)}">
@@ -1190,7 +1210,7 @@ function renderRest(rebuild = false) {
   if (left <= 0 && !r.rung) { r.rung = true; beep(); }
   if (left <= -4) { ui.rest = null; $rest.className = ''; $rest.innerHTML = ''; return; }
   const pct = Math.max(0, Math.min(1, left / r.total));
-  $rest.className = 'show' + (left <= 0 ? ' go' : '');
+  $rest.className = 'show' + (left <= 0 ? ' go' : left <= 10 ? ' urgent' : '');
   $rest.innerHTML = `<div class="rest-bar" style="transform:scaleX(${pct})"></div>
     <span class="rest-t">${left > 0 ? `Rest ${fmtDur(left)}` : 'Go'}</span>
     <button data-act="rest-add">+30</button><button data-act="rest-x" aria-label="Dismiss">✕</button>`;
@@ -1280,6 +1300,7 @@ function finish() {
   S.active = null; ui.rest = null;
   save();
   ui.summary = w.id; ui.screen = 'summary';
+  if (isNeon()) { wakeAudio(); chime(); }
   render(); scrollTo(0, 0);
 }
 
@@ -1341,6 +1362,66 @@ function applyTheme() {
   const t = S.settings.theme;
   if (t === 'auto') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
+  document.querySelectorAll('meta[name=theme-color]').forEach(m => {
+    m.dataset.orig ??= m.content;
+    m.content = t === 'neon' ? '#120a24' : m.dataset.orig;
+  });
+  // Neon's display fonts load only when the theme is on; offline it falls back to the system font.
+  if (t === 'neon' && !document.getElementById('neon-fonts')) {
+    const l = document.createElement('link');
+    l.id = 'neon-fonts'; l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Monoton&family=Space+Grotesk:wght@500;700&display=swap';
+    document.head.append(l);
+  }
+}
+
+// ----- Neon: phone home screen on open -----
+const PALM_A = '<svg class="sp-palm a" viewBox="0 0 170 240" aria-hidden="true"><path d="M92 240 C88 180 86 120 98 70" stroke-width="9"/><path class="f" d="M98 70 C70 50 40 52 8 70 C40 58 70 64 96 76Z M98 70 C80 36 56 20 26 18 C56 30 78 48 94 74Z M98 70 C112 36 136 22 166 24 C138 34 118 50 102 74Z M98 70 C128 60 152 70 168 96 C146 78 124 74 100 76Z M98 70 C100 44 96 20 84 2 C104 22 108 46 102 72Z"/></svg>';
+const PALM_B = '<svg class="sp-palm b" viewBox="0 0 140 200" aria-hidden="true"><path d="M60 200 C64 150 70 100 62 58" stroke-width="8"/><path class="f" d="M62 58 C40 42 20 44 0 58 C24 48 44 52 60 64Z M62 58 C50 30 32 16 8 14 C32 26 48 42 58 62Z M62 58 C74 30 96 18 120 20 C98 28 80 42 66 62Z M62 58 C88 50 108 60 136 82 C110 66 88 62 64 64Z"/></svg>';
+let splashT = 0;
+function showSplash() {
+  if (document.getElementById('splash')) return;
+  const el = document.createElement('div');
+  el.id = 'splash';
+  const wk = Math.min(5, weekCount()), today = dk(new Date());
+  const pending = !S.active && !S.sessions.some(x => x.date === today);
+  const stars = [[46, 56], [300, 42], [338, 120], [26, 170], [250, 200], [96, 28], [190, 90]].map(([x, y], i) =>
+    `<i class="sp-star" style="left:${(x / 3.9).toFixed(1)}%;top:${y}px;animation-delay:${i * .6}s"></i>`).join('');
+  const bldg = [[26, 38], [20, 58], [34, 80, 1], [22, 50], [30, 66], [0, 0], [24, 46], [38, 84, 2], [22, 60], [28, 42]].map(([w, h, k]) =>
+    w ? `<span class="${k === 2 ? 'top' : ''}" style="width:${w}px;height:${h}px">${k ? '<i></i><i></i><i></i>' : ''}</span>` : '<b></b>').join('');
+  const app = (cls, icon, label, act) => act
+    ? `<button class="sp-app hero" data-act="splash-go"><span class="sp-ic ${cls}">${icon}</span>${pending ? '<em>1</em>' : ''}<small>${label}</small></button>`
+    : `<span class="sp-app"><span class="sp-ic ${cls}">${icon}</span><small>${label}</small></span>`;
+  el.innerHTML = `<div class="sp-sky"></div>${stars}
+    <div class="sp-sunbox"><div class="sp-sun"></div></div>
+    <div class="sp-city">${bldg}</div>
+    <div class="sp-sea"></div><div class="sp-refl"></div><div class="sp-wave"></div>
+    ${PALM_A}${PALM_B}
+    <div class="sp-clock"><p class="sp-date"></p><p class="sp-time"></p><p class="sp-name">Gains Coast</p></div>
+    <div class="sp-dock">
+      <div class="sp-week"><span>This week</span><span class="sp-bars">${Array.from({ length: 5 }, (_, i) => `<i class="${i < wk ? 'on' : ''}"></i>`).join('')}</span><b>${wk} / 5</b></div>
+      <div class="sp-apps">
+        ${app('w', '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>', 'Workout', true)}
+        ${app('p', '<svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>', 'Pulse')}
+        ${app('t', '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>', 'Tunes')}
+        ${app('m', '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>', 'Map')}
+      </div>
+      <p class="sp-hint">Tap <b>Workout</b> to open</p>
+    </div>`;
+  document.body.append(el);
+  const tick = () => {
+    const d = new Date();
+    el.querySelector('.sp-time').textContent = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M$/i, '');
+    el.querySelector('.sp-date').textContent = d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' });
+  };
+  tick(); clearInterval(splashT); splashT = setInterval(tick, 10000);
+}
+function hideSplash() {
+  const el = document.getElementById('splash');
+  if (!el) return;
+  clearInterval(splashT);
+  el.classList.add('out');
+  setTimeout(() => el.remove(), 450);
 }
 
 const actions = {
@@ -1419,6 +1500,7 @@ const actions = {
       if (n(s.r) <= 0) { $app.querySelector(`input[data-f=r][data-i="${b.dataset.i}"][data-j="${b.dataset.j}"]`)?.focus(); return; }
       if (ex.t === 'w' && s.w === '') { $app.querySelector(`input[data-f=w][data-i="${b.dataset.i}"][data-j="${b.dataset.j}"]`)?.focus(); return; }
       s.d = true;
+      ui.flash = { i: +b.dataset.i, j: +b.dataset.j, at: Date.now() };
       if (!ui.edit) startRest(ex.rest);
     } else s.d = false;
     document.activeElement?.blur?.();
@@ -1472,6 +1554,7 @@ const actions = {
   metric: b => { ui.metric = b.dataset.v; render(); },
   sheet: b => { const it = ui.sheet?.[+b.dataset.i]; closeSheet(); it?.fn(); },
   'sheet-x': closeSheet,
+  'splash-go': hideSplash,
   loc: openLocations,
   'loc-pick': b => { S.settings.where = b.dataset.v; save(); closeSheet(); render(); toast(`Working out at ${curLoc().name}`); },
   'loc-add': addLocation,
@@ -1620,6 +1703,7 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => re
 
 // ---------- boot ----------
 applyTheme();
+if (isNeon() && S.settings.splash !== false) showSplash();
 if (S.active) ui.screen = 'workout';
 render();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
