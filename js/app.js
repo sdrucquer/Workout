@@ -1,8 +1,9 @@
-import { PROGRAM, DAYS, REST_NOTE, ORDER } from './program.js';
+import { PROGRAM, DAYS, REST_NOTE, ORDER, LOCATIONS, HOME, TRAVEL } from './program.js';
+const DEFAULTS = { ...PROGRAM, ...HOME, ...TRAVEL };
 
 // ---------- storage ----------
 const LS = 'wt1';
-const DEF_SETTINGS = { theme: 'auto', unit: 'lb', rest: true, bw: '' };
+const DEF_SETTINGS = { theme: 'auto', unit: 'lb', rest: true, bw: '', where: 'school' };
 // Stored state only ever gains fields (program, settings.bw, …) and stays
 // v: 1, so an older copy of the app can still read it without wiping anything.
 
@@ -104,22 +105,37 @@ const I = {
   play: '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>',
 };
 
 // ---------- program ----------
 // The program lives in program.js; edits made in the app are stored in S.program.
-const prog = () => S.program || PROGRAM;
+// Home workouts are merged in so an older saved program still gets them.
+const prog = () => (S.program ? { ...DEFAULTS, ...S.program } : DEFAULTS);
+// The gym workout a workout stands in for (Push · Home → Push).
+const baseDay = d => prog()[d]?.of ?? d;
+// Locations: School (the main program), Home, Travel, plus any added in the app (S.locs).
+const locs = () => [...LOCATIONS, ...(S.locs || [])];
+const curLoc = () => locs().find(l => l.id === S.settings.where) || locs()[0];
+const locDays = id => (id === 'school' ? ORDER.filter(d => prog()[d])
+  : Object.keys(prog()).map(Number).filter(d => prog()[d].loc === id).sort((a, b) => a - b));
+// The version of a School workout to do where you are now (Push → Push · Home).
+const here = d => {
+  const id = curLoc().id;
+  return id === 'school' ? d : locDays(id).find(h => prog()[h].of === d) ?? d;
+};
+const allDays = () => locs().flatMap(l => locDays(l.id));
 const normWarm = x => (typeof x === 'string' ? { n: x } : x);
 const isRunDay = d => !!prog()[d]?.ex.length && prog()[d].ex.every(e => e.t === 'run');
 // Non-run workouts in order form the cycle.
 const rotation = () => ORDER.filter(d => prog()[d] && !isRunDay(d));
 function nextUp() {
   const rot = rotation();
-  const last = [...S.sessions].reverse().find(s => rot.includes(s.day));
-  return last ? rot[(rot.indexOf(last.day) + 1) % rot.length] : null;
+  const last = [...S.sessions].reverse().find(s => rot.includes(baseDay(s.day)));
+  return last ? rot[(rot.indexOf(baseDay(last.day)) + 1) % rot.length] : null;
 }
 function saveProgramDay(d, def) {
-  S.program ||= clone(PROGRAM);
+  S.program ||= clone(DEFAULTS);
   S.program[d] = def;
   save();
 }
@@ -259,7 +275,7 @@ const baseDef = (w, ex) => prog()[w.day]?.ex.find(d => d.k === (ex.base || ex.k)
 
 function catalog() {
   const m = new Map();
-  for (const d of ORDER) {
+  for (const d of allDays()) {
     const p = prog()[d];
     if (!p) continue;
     for (const def of p.ex) {
@@ -370,10 +386,11 @@ function vHome() {
   const now = new Date(), today = dk(now), day = now.getDay(), a = S.active;
   const sel = ui.selDay && ui.selDay !== today ? ui.selDay : null;
   const todayDone = S.sessions.filter(s => s.date === today).at(-1);
-  const next = nextUp();
+  const gymNext = nextUp(), next = gymNext == null ? null : here(gymNext);
   // On a workout day, follow the cycle (the workout after the last one you did);
-  // run days stay on the calendar.
-  const show = prog()[day] ? (isRunDay(day) ? day : next ?? day) : null;
+  // run days stay on the calendar. At home, lifting days become their home version.
+  const gymShow = prog()[day] ? (isRunDay(day) ? day : gymNext ?? day) : null;
+  const show = gymShow == null ? null : here(gymShow);
   let hero, heroDay = null;
   if (sel) hero = vDayHero(sel);
   else if (a) {
@@ -396,7 +413,7 @@ function vHome() {
     heroDay = show;
     const last = [...S.sessions].reverse().find(s => s.day === show);
     hero = `
-      <p class="eyebrow">${DAYS[day]}${show !== day ? ' · Next in your cycle' : ''}</p>
+      <p class="eyebrow">${DAYS[day]}${gymShow !== day ? ' · Next in your cycle' : ''}</p>
       <h2 class="big">${esc(p.title)}</h2>
       ${preview(p)}
       ${last ? `<p class="muted small">Last time ${fmtDate(last.date)} · ${mins(last.end - last.start)} min</p>` : ''}
@@ -409,7 +426,7 @@ function vHome() {
       <p class="muted">${REST_NOTE}</p>
       ${nx ? `<p class="muted small">Next in your cycle: ${esc(nx.title)}</p>` : ''}`;
   }
-  const chips = ORDER.filter(d => prog()[d] && (d !== heroDay || isRunDay(d))).map(d =>
+  const chips = ORDER.filter(d => prog()[d]).map(here).filter(d => d !== heroDay || isRunDay(d)).map(d =>
     `<button class="chip" data-act="start" data-day="${d}">${esc(prog()[d].short)}</button>`).join('');
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const tip = !standalone && !localStorage.getItem('wt-tip') && /iPhone|iPad/.test(navigator.userAgent)
@@ -417,6 +434,7 @@ function vHome() {
   return `${topbar(`<span class="date">${now.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>`)}
     <main class="page">
       ${weekStrip()}
+      ${a || sel ? '' : `<button class="loc-pill" data-act="loc">${I.pin}<span>${esc(curLoc().name)}</span>${I.down}</button>`}
       <section class="hero">${hero}</section>
       ${a || sel ? '' : `<p class="eyebrow">${heroDay != null ? 'Or do a different workout' : 'Start a workout'}</p><div class="chips">${chips}</div>`}
       ${tip}
@@ -873,6 +891,52 @@ function openAddExercise(replace = null) {
   setTimeout(() => f.n.focus(), 50);
 }
 
+// ----- locations -----
+function openLocations() {
+  const cur = curLoc().id;
+  ui.sheet = [];
+  $sheet.innerHTML = `<div class="sheet-bg" data-act="sheet-x"></div><div class="sheet-panel">
+    <p class="eyebrow center">Where are you working out?</p>
+    ${locs().map(l => `<div class="loc-row">
+      <button class="loc-opt ${l.id === cur ? 'on' : ''}" data-act="loc-pick" data-v="${esc(l.id)}">
+        <span><b>${esc(l.name)}</b><small>${esc(l.note || locDays(l.id).map(d => prog()[d].short).join(' · '))}</small></span>
+        ${l.id === cur ? I.check : ''}</button>
+      ${l.custom ? `<button class="icon sm" data-act="loc-del" data-v="${esc(l.id)}" aria-label="Remove ${esc(l.name)}">✕</button>` : ''}</div>`).join('')}
+    <button class="btn link" data-act="loc-add">${I.plus} Add a location</button>
+    <p class="muted small center">Speed + Core and runs stay the same everywhere. Edit any location's workouts in Settings.</p>
+    <button class="sheet-btn cancel" data-act="sheet-x">Done</button></div>`;
+  $sheet.classList.add('open');
+}
+// A new location starts as a copy of the one you're at now; edit it in Settings → Workouts.
+function addLocation() {
+  const name = (prompt('Name the new location (e.g. Hotel, Grandma\'s)') || '').trim();
+  if (!name) return;
+  const from = curLoc(), id = 'loc-' + uid();
+  const keys = Object.keys(prog()).map(Number);
+  const base = (Math.floor(Math.max(29, ...keys) / 10) + 1) * 10;
+  S.program ||= clone(DEFAULTS);
+  for (const d of locDays(from.id)) {
+    if (isRunDay(d)) continue;
+    const of = baseDay(d);
+    if (of === 2) continue; // Speed + Core is shared
+    const p = clone(prog()[d]);
+    Object.assign(p, { title: `${p.short} · ${name}`, of, loc: id });
+    S.program[base + of] = p;
+  }
+  (S.locs ||= []).push({ id, name, custom: true, note: `Copied from ${from.name} · edit in Settings` });
+  S.settings.where = id;
+  save(); closeSheet(); render();
+  toast(`Added ${name} · edit its workouts in Settings`);
+}
+function removeLocation(id) {
+  const l = (S.locs || []).find(x => x.id === id);
+  if (!l || !confirm(`Remove ${l.name} and its workouts? Workouts you've logged there stay in History.`)) return;
+  for (const d of locDays(id)) delete S.program[d];
+  S.locs = S.locs.filter(x => x.id !== id);
+  if (S.settings.where === id) S.settings.where = 'school';
+  save(); openLocations(); render();
+}
+
 function openSettings() {
   const st = S.settings;
   const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button class="${st[key] === v ? 'on' : ''}" data-act="set" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
@@ -885,7 +949,8 @@ function openSettings() {
     <input class="text-in" data-sf="bw" inputmode="decimal" placeholder="e.g. 180" value="${esc(st.bw)}">
     <p class="lbl">Rest timer after each set</p>${seg('rest', [[true, 'On'], [false, 'Off']])}
     <p class="lbl">Workouts · change exercises, sets and warm-ups</p>
-    <div class="chips">${ORDER.filter(d => prog()[d]).map(d => `<button class="chip" data-act="edit-prog" data-d="${d}">${esc(prog()[d].short)}</button>`).join('')}</div>
+    ${locs().map(l => `<div class="set-loc"><span>${esc(l.name)}</span><div class="chips">${locDays(l.id).map(d =>
+      `<button class="chip" data-act="edit-prog" data-d="${d}">${esc(prog()[d].short)}</button>`).join('')}</div></div>`).join('')}
     <p class="lbl">Backup · ${S.sessions.length} workouts saved on this device</p>
     <div class="row2"><button class="btn ghost" data-act="export">Export</button><button class="btn ghost" data-act="import">Import</button></div>
     <button class="sheet-btn cancel" data-act="sheet-x">Close</button></div>`;
@@ -1327,8 +1392,8 @@ const actions = {
   },
   'pe-save': saveProgram,
   'pe-more': () => openSheet(ui.draft.title, [{ label: 'Reset to the original workout', danger: true, fn: () => {
-    if (!PROGRAM[ui.pd]) return;
-    const p = clone(PROGRAM[ui.pd]); p.warmup = (p.warmup || []).map(normWarm);
+    if (!DEFAULTS[ui.pd]) return;
+    const p = clone(DEFAULTS[ui.pd]); p.warmup = (p.warmup || []).map(normWarm);
     ui.draft = p; render(); toast('Reset · tap Save to keep it');
   } }]),
   'pe-wadd': () => { ui.draft.warmup.push({ n: '' }); render(); $app.querySelector(`[data-pf=wn][data-j="${ui.draft.warmup.length - 1}"]`)?.focus(); },
@@ -1407,6 +1472,10 @@ const actions = {
   metric: b => { ui.metric = b.dataset.v; render(); },
   sheet: b => { const it = ui.sheet?.[+b.dataset.i]; closeSheet(); it?.fn(); },
   'sheet-x': closeSheet,
+  loc: openLocations,
+  'loc-pick': b => { S.settings.where = b.dataset.v; save(); closeSheet(); render(); toast(`Working out at ${curLoc().name}`); },
+  'loc-add': addLocation,
+  'loc-del': b => removeLocation(b.dataset.v),
   set: b => {
     const k = b.dataset.k, v = b.dataset.v;
     S.settings[k] = v === 'true' ? true : v === 'false' ? false : v;
