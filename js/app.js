@@ -102,6 +102,7 @@ const I = {
   check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   chev: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5M12 2.5V5"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
@@ -385,6 +386,31 @@ function vDayHero(k) {
     <button class="btn link" data-act="day" data-v="${dk(new Date())}">Back to today</button>`;
 }
 
+// Today's finished workout: totals up top, then each exercise with its sets as chips (PRs in gold).
+function vDoneCard(w) {
+  const exs = w.ex.filter(hasData);
+  const sets = exs.reduce((t, ex) => t + (ex.run ? 0 : doneSets(ex).length), 0);
+  const vol = exs.reduce((t, ex) => t + (ex.t === 'w' ? doneSets(ex).reduce((b, s) => b + n(s.w) * n(s.r), 0) : 0), 0);
+  const chip = (ex, s) => ex.t === 't' ? `${fw(n(s.r))}s`
+    : ex.t === 'bw' ? (sw(ex, s) ? `${sgn(sw(ex, s))}×${fw(n(s.r))}` : fw(n(s.r)))
+    : `${fw(n(s.w))}×${fw(n(s.r))}`;
+  const rows = exs.map(ex => {
+    if (ex.run) return `<li><div class="dn-top"><b>${esc(ex.n)}</b></div><div class="dn-sets"><span class="dn-chip">${esc(fmtRun(ex))}</span></div></li>`;
+    const ds = ex.sets.map((s, j) => [s, j]).filter(([s]) => s.d);
+    const anyPR = ds.some(([, j]) => isPR(ex, j, w.start));
+    return `<li><div class="dn-top"><b>${esc(ex.n)}</b>${anyPR ? '<span class="dn-pr">PR</span>' : ''}</div>
+      <div class="dn-sets">${ds.map(([s, j]) => `<span class="dn-chip ${isPR(ex, j, w.start) ? 'pr' : ''}">${esc(chip(ex, s))}</span>`).join('')}${ex.t === 'bw' && !ds.some(([s]) => sw(ex, s)) ? '<small>reps</small>' : ''}</div></li>`;
+  }).join('');
+  return `<section class="done-card">
+    <p class="dn-head">${I.check} Done today</p>
+    <div class="dn-stats">
+      <div><b>${mins(w.end - w.start)}</b><span>min</span></div>
+      <div><b>${sets}</b><span>sets</span></div>
+      ${vol ? `<div><b>${Math.round(vol).toLocaleString()}</b><span>${unit()} volume</span></div>` : `<div><b>${exs.length}</b><span>exercises</span></div>`}
+    </div>
+    <ul class="dn-list">${rows}</ul>
+  </section>`;
+}
 const preview = p => `<ul class="preview">${p.ex.map(e => `<li><span>${esc(e.n)}${e.alts?.length ? ` <small class="muted">or ${esc(e.alts.map(x => x.n).join(', '))}</small>` : ''}</span><span>${e.sets ? `${e.sets} × ` : ''}${esc(e.target)}</span></li>`).join('')}</ul>`;
 
 function vHome() {
@@ -409,8 +435,7 @@ function vHome() {
     hero = `
       <p class="eyebrow">${DAYS[day]}</p>
       <h2 class="big">${esc(todayDone.title)}</h2>
-      <ul class="preview">${todayDone.ex.filter(hasData).map(ex => `<li><span>${esc(ex.n)}</span><span>${esc(ex.run ? fmtRun(ex) : fmtSets(ex, doneSets(ex)))}</span></li>`).join('')}</ul>
-      <p class="done-note">${I.check} Done today · ${mins(todayDone.end - todayDone.start)} min</p>
+      ${vDoneCard(todayDone)}
       <button class="btn ghost xl" data-act="open-session" data-id="${todayDone.id}">View Workout</button>
       ${nx ? `<p class="muted small">Next in your cycle: ${esc(nx.title)}</p>` : ''}`;
   } else if (show != null) {
@@ -441,7 +466,8 @@ function vHome() {
       ${weekStrip()}
       ${a || sel ? '' : `<button class="loc-pill" data-act="loc">${I.pin}<span>${esc(curLoc().name)}</span>${I.down}</button>`}
       <section class="hero">${hero}</section>
-      ${a || sel ? '' : `<p class="eyebrow">${heroDay != null ? 'Or do a different workout' : 'Start a workout'}</p><div class="chips">${chips}</div>`}
+      ${a || sel ? '' : `<p class="eyebrow">${heroDay != null ? 'Or do a different workout' : 'Start a workout'}</p><div class="chips">${chips}</div>
+      <button class="rt-open" data-act="rounds">${I.clock}<span><b>Timer</b><small>Countdown or intervals · boxing, jump rope, anything</small></span>${I.chev}</button>`}
       ${tip}
     </main>`;
 }
@@ -1156,11 +1182,12 @@ function startRest(sec) {
 }
 // Countdown for a timed set or warm-up, shown as a big ring. When it ends the
 // set (or warm-up) is checked off and the rest timer starts.
-function startWork(sec, work) {
+// ready: open the timer full and waiting, so you can get set up (grab the bar) and tap the circle to go.
+function startWork(sec, work, ready = false) {
   if (!sec) return;
   wakeAudio();
-  keepAwake(true);
-  ui.rest = { end: Date.now() + sec * 1000, total: sec, rung: false, work, paused: null, min: false, done: false, cue: null };
+  if (!ready) keepAwake(true);
+  ui.rest = { end: Date.now() + sec * 1000, total: sec, rung: false, work, paused: ready ? sec * 1000 : null, ready, min: false, done: false, cue: null };
   renderRest(true);
 }
 const workLeft = r => (r.paused != null ? r.paused : r.end - Date.now());
@@ -1215,7 +1242,7 @@ function renderRest(rebuild = false) {
     <span class="rest-t">${left > 0 ? `Rest ${fmtDur(left)}` : 'Go'}</span>
     <button data-act="rest-add">+30</button><button data-act="rest-x" aria-label="Dismiss">✕</button>`;
 }
-const timerState = r => (r.done ? 'done' : r.paused != null ? 'paused' : 'run');
+const timerState = r => (r.done ? 'done' : r.ready ? 'ready' : r.paused != null ? 'paused' : 'run');
 function buildTimer(r) {
   const st = timerState(r);
   $timer.dataset.state = st;
@@ -1225,22 +1252,23 @@ function buildTimer(r) {
       <p class="eyebrow">${esc(r.work.label)}</p>
       <button class="icon" data-act="rest-x" aria-label="Stop timer">✕</button>
     </div>
-    <div class="tm-ring">
+    <button class="tm-ring" ${st === 'done' ? 'data-act="rest-x"' : 'data-act="tm-pause"'} aria-label="${st === 'run' ? 'Pause' : st === 'done' ? 'Close' : 'Start'}">
       <svg viewBox="0 0 200 200" aria-hidden="true"><circle class="tm-track" cx="100" cy="100" r="92"/><circle class="tm-prog" cx="100" cy="100" r="92" stroke-dasharray="${RING}" stroke-dashoffset="0"/></svg>
-      <div class="tm-num">${st === 'done' ? `<i class="tm-check">${I.check}</i><b class="tm-done">Done</b>` : '<b data-tm="t"></b>'}<span data-tm="s"></span></div>
-    </div>
+      <span class="tm-num">${st === 'done' ? `<i class="tm-check">${I.check}</i><b class="tm-done">Done</b>` : '<b data-tm="t"></b>'}<span data-tm="s"></span></span>
+      <i class="tm-ripple" aria-hidden="true"></i>
+    </button>
     <p class="tm-sub">${esc(r.work.sub || '')}</p>
     <div class="tm-btns">${st === 'done'
       ? `<button class="btn primary xl" data-act="rest-x">${r.work.ex?.rest && S.settings.rest ? 'Start rest' : 'Close'}</button>`
-      : `<button class="tm-b" data-act="tm-reset">Reset</button>
-         <button class="tm-b main" data-act="tm-pause">${st === 'paused' ? `${I.play}Resume` : `${I.pause}Pause`}</button>
+      : `<button class="tm-b" data-act="tm-reset" ${st === 'ready' ? 'disabled' : ''}>Reset</button>
+         <button class="tm-b main" data-act="tm-pause">${st === 'ready' ? `${I.play}Start` : st === 'paused' ? `${I.play}Resume` : `${I.pause}Pause`}</button>
          <button class="tm-b" data-act="rest-add">+15s</button>`}</div>`;
 }
 function tickTimer(r) {
   const ms = Math.max(0, workLeft(r)), left = Math.ceil(ms / 1000);
   const t = $timer.querySelector('[data-tm=t]'), sub = $timer.querySelector('[data-tm=s]'), ring = $timer.querySelector('.tm-prog');
   if (t) t.textContent = fmtDur(left);
-  if (sub) sub.textContent = r.done ? `${fmtDur(r.total)} held` : r.paused != null ? 'Paused' : `of ${fmtDur(r.total)}`;
+  if (sub) sub.textContent = r.done ? `${fmtDur(r.total)} held` : r.ready ? 'Tap to start' : r.paused != null ? 'Paused · tap to resume' : 'Tap to pause';
   ring?.setAttribute('stroke-dashoffset', r.done ? 0 : (RING * (1 - Math.min(1, ms / (r.total * 1000)))).toFixed(1));
   $timer.classList.toggle('last', !r.done && left <= 3);
   // 3-2-1 ticks before the end
@@ -1375,6 +1403,109 @@ function applyTheme() {
   }
 }
 
+// ----- Round timer: boxing, jump rope, any work/rest intervals -----
+const RT_PRESETS = [['Boxing', 180, 60, 3], ['Jump rope', 60, 30, 5], ['Tabata', 20, 10, 8], ['Bag sprints', 30, 30, 6]];
+const RT_QUICK = [30, 60, 90, 120, 180, 300];
+const rtCfg = () => {
+  const c = (S.settings.rt ||= {});
+  c.mode ??= 'timer'; c.timer ??= 60; c.work ??= 180; c.rest ??= 60; c.rounds ??= 3;
+  return c;
+};
+// What the clock actually runs: one countdown in Timer mode, work/rest rounds in Intervals.
+const rtEff = () => { const c = rtCfg(); return c.mode === 'timer' ? { work: c.timer, rest: 0, rounds: 1, single: true } : c; };
+let rt = null, rtT = 0;
+const rtBell = () => { tone(1320, 0.5, 0, 0.35); tone(1320, 0.5, 0.35, 0.35); tone(1320, 0.8, 0.7, 0.35); navigator.vibrate?.([250, 100, 250, 100, 400]); };
+function openRounds() {
+  if (!document.getElementById('rounds')) {
+    const el = document.createElement('div'); el.id = 'rounds'; document.body.append(el);
+  }
+  rtReset();
+}
+function closeRounds() {
+  clearInterval(rtT); rt = null; keepAwake(false);
+  const el = document.getElementById('rounds');
+  if (el) { el.classList.add('out'); setTimeout(() => el.remove(), 250); }
+}
+function rtReset() {
+  clearInterval(rtT);
+  rt = { phase: 'ready', round: 1, end: 0, left: rtEff().work * 1000, paused: true, cue: null };
+  renderRounds(true);
+}
+function rtToggle() {
+  wakeAudio();
+  if (rt.phase === 'done') return rtReset();
+  if (rt.paused) {
+    if (rt.phase === 'ready') { rt.phase = 'work'; if (!rtEff().single) rtBell(); else tone(880, 0.15, 0, 0.3); }
+    rt.end = Date.now() + rt.left; rt.paused = false;
+    keepAwake(true);
+    clearInterval(rtT); rtT = setInterval(rtTick, 200);
+  } else {
+    rt.left = Math.max(0, rt.end - Date.now()); rt.paused = true;
+    clearInterval(rtT); keepAwake(false);
+  }
+  renderRounds(true);
+}
+function rtTick() {
+  if (!rt || rt.paused) return;
+  const c = rtEff(), ms = rt.end - Date.now(), s = Math.ceil(ms / 1000);
+  if (rt.phase === 'work' && s === 10 && rt.cue !== 10 && c.work > 20) { rt.cue = 10; tone(660, 0.15, 0, 0.3); tone(660, 0.15, 0.2, 0.3); }
+  if (s <= 3 && s >= 1 && rt.cue !== s) { rt.cue = s; tone(rt.phase === 'work' ? 520 : 660, 0.12, 0, 0.25); }
+  if (ms <= 0) {
+    if (rt.phase === 'work' && rt.round >= c.rounds) {
+      rt.phase = 'done'; rt.paused = true; clearInterval(rtT); keepAwake(false); chime();
+    } else if (rt.phase === 'work' && c.rest > 0) {
+      rt.phase = 'rest'; rt.end = Date.now() + c.rest * 1000; rtBell();
+    } else {
+      if (rt.phase === 'rest' || c.rest === 0) rt.round++;
+      rt.phase = 'work'; rt.end = Date.now() + c.work * 1000; rtBell();
+    }
+    rt.cue = null;
+    return renderRounds(true);
+  }
+  renderRounds(false);
+}
+function renderRounds(rebuild) {
+  const el = document.getElementById('rounds'); if (!el || !rt) return;
+  const c = rtEff(), cfg = rtCfg(), single = !!c.single;
+  const ms = rt.paused ? rt.left : Math.max(0, rt.end - Date.now());
+  const total = (rt.phase === 'rest' ? c.rest : c.work) * 1000 || 1;
+  if (rt.paused && rt.phase !== 'ready' && rt.phase !== 'done') { /* keep left */ }
+  const label = single ? { ready: 'Timer', work: 'Timer', rest: 'Rest', done: 'Done' }[rt.phase] : { ready: 'Ready', work: 'Work', rest: 'Rest', done: 'Done' }[rt.phase];
+  if (rebuild) {
+    const adj = (f, d, txt) => `<button class="rt-adj" data-act="rt-adj" data-f="${f}" data-d="${d}" aria-label="${txt}">${d > 0 ? '+' : '−'}</button>`;
+    const running = !rt.paused || (rt.phase !== 'ready' && rt.phase !== 'done');
+    el.className = `rt-${rt.phase}${rt.paused ? ' paused' : ''}`;
+    el.innerHTML = `<div class="rt-top">
+        <button class="icon" data-act="rt-x" aria-label="Close timer">${I.down}</button>
+        <p class="eyebrow">Timer</p><span style="width:44px"></span></div>
+      ${running ? '' : `<div class="seg rt-mode"><button class="${single ? 'on' : ''}" data-act="rt-mode" data-v="timer">Timer</button><button class="${single ? '' : 'on'}" data-act="rt-mode" data-v="rounds">Intervals</button></div>
+      <div class="rt-presets">${single
+        ? RT_QUICK.map(sec => `<button class="chip ${cfg.timer === sec ? 'on' : ''}" data-act="rt-quick" data-v="${sec}">${fmtDur(sec)}</button>`).join('')
+        : RT_PRESETS.map(([nm, w, r, n]) => `<button class="chip ${c.work === w && c.rest === r && c.rounds === n ? 'on' : ''}" data-act="rt-preset" data-v="${w},${r},${n}">${nm}</button>`).join('')}</div>`}
+      <button class="rt-ring" data-act="rt-go" aria-label="${rt.paused ? 'Start' : 'Pause'}">
+        <svg viewBox="0 0 200 200" aria-hidden="true"><circle class="tm-track" cx="100" cy="100" r="92"/><circle class="rt-prog" cx="100" cy="100" r="92" stroke-dasharray="${RING}" stroke-dashoffset="0"/></svg>
+        <span class="rt-num"><span class="rt-phase">${label}</span><b data-rt="t"></b>${single ? '' : `<span class="rt-round">${rt.phase === 'done' ? `${c.rounds} rounds` : `Round ${rt.round} of ${c.rounds}`}</span>`}
+          <small class="rt-tap">${rt.phase === 'done' ? 'Tap to go again' : rt.paused ? (rt.phase === 'ready' ? 'Tap to start' : 'Paused · tap to resume') : 'Tap to pause'}</small></span>
+        <i class="tm-ripple" aria-hidden="true"></i>
+      </button>
+      ${running ? '' : single ? `<div class="rt-cfg">
+        <div><span>Time</span><div class="rt-step">${adj('timer', -15, 'Less time')}<b>${fmtDur(cfg.timer)}</b>${adj('timer', 15, 'More time')}</div></div>
+      </div>` : `<div class="rt-cfg">
+        <div><span>Round</span><div class="rt-step">${adj('work', -30, 'Shorter rounds')}<b>${fmtDur(c.work)}</b>${adj('work', 30, 'Longer rounds')}</div></div>
+        <div><span>Rest</span><div class="rt-step">${adj('rest', -15, 'Less rest')}<b>${fmtDur(c.rest)}</b>${adj('rest', 15, 'More rest')}</div></div>
+        <div><span>Rounds</span><div class="rt-step">${adj('rounds', -1, 'Fewer rounds')}<b>${c.rounds}</b>${adj('rounds', 1, 'More rounds')}</div></div>
+      </div>`}
+      <div class="rt-btns">
+        ${rt.phase !== 'ready' ? '<button class="tm-b" data-act="rt-reset">Reset</button>' : ''}
+        <button class="btn primary xl rt-go" data-act="rt-go">${rt.phase === 'done' ? 'Again' : rt.paused ? (rt.phase === 'ready' ? 'Start' : 'Resume') : 'Pause'}</button>
+      </div>
+      <p class="muted small center">${rt.phase !== 'ready' ? 'Keep the app open so the alarm can sound.' : single ? 'Chimes when time is up' : `Total ${fmtDur(c.work * c.rounds + c.rest * (c.rounds - 1))} · bell at each switch, double beep 10s before a round ends`}</p>`;
+  }
+  const t = el.querySelector('[data-rt=t]'), ring = el.querySelector('.rt-prog');
+  if (t) t.textContent = rt.phase === 'done' ? '0:00' : fmtDur(Math.ceil(ms / 1000));
+  ring?.setAttribute('stroke-dashoffset', rt.phase === 'ready' ? 0 : rt.phase === 'done' ? RING : (RING * (1 - ms / total)).toFixed(1));
+}
+
 // ----- Neon: phone home screen on open -----
 const PALM_A = '<svg class="sp-palm a" viewBox="0 0 170 240" aria-hidden="true"><path d="M92 240 C88 180 86 120 98 70" stroke-width="9"/><path class="f" d="M98 70 C70 50 40 52 8 70 C40 58 70 64 96 76Z M98 70 C80 36 56 20 26 18 C56 30 78 48 94 74Z M98 70 C112 36 136 22 166 24 C138 34 118 50 102 74Z M98 70 C128 60 152 70 168 96 C146 78 124 74 100 76Z M98 70 C100 44 96 20 84 2 C104 22 108 46 102 72Z"/></svg>';
 const PALM_B = '<svg class="sp-palm b" viewBox="0 0 140 200" aria-hidden="true"><path d="M60 200 C64 150 70 100 62 58" stroke-width="8"/><path class="f" d="M62 58 C40 42 20 44 0 58 C24 48 44 52 60 64Z M62 58 C50 30 32 16 8 14 C32 26 48 42 58 62Z M62 58 C74 30 96 18 120 20 C98 28 80 42 66 62Z M62 58 C88 50 108 60 136 82 C110 66 88 62 64 64Z"/></svg>';
@@ -1389,9 +1520,9 @@ function showSplash() {
     `<i class="sp-star" style="left:${(x / 3.9).toFixed(1)}%;top:${y}px;animation-delay:${i * .6}s"></i>`).join('');
   const bldg = [[26, 38], [20, 58], [34, 80, 1], [22, 50], [30, 66], [0, 0], [24, 46], [38, 84, 2], [22, 60], [28, 42]].map(([w, h, k]) =>
     w ? `<span class="${k === 2 ? 'top' : ''}" style="width:${w}px;height:${h}px">${k ? '<i></i><i></i><i></i>' : ''}</span>` : '<b></b>').join('');
-  const app = (cls, icon, label, act) => act
-    ? `<button class="sp-app hero" data-act="splash-go"><span class="sp-ic ${cls}">${icon}</span>${pending ? '<em>1</em>' : ''}<small>${label}</small></button>`
-    : `<span class="sp-app"><span class="sp-ic ${cls}">${icon}</span><small>${label}</small></span>`;
+  // Every icon opens the app: Workout on Today, the others on their own screen.
+  const app = (cls, icon, label, to) =>
+    `<button class="sp-app ${to === 'home' ? 'hero' : ''}" data-act="splash-go" data-to="${to}"><span class="sp-ic ${cls}">${icon}</span>${to === 'home' && pending ? '<em>1</em>' : ''}<small>${label}</small></button>`;
   el.innerHTML = `<div class="sp-sky"></div>${stars}
     <div class="sp-sunbox"><div class="sp-sun"></div></div>
     <div class="sp-city">${bldg}</div>
@@ -1401,12 +1532,12 @@ function showSplash() {
     <div class="sp-dock">
       <div class="sp-week"><span>This week</span><span class="sp-bars">${Array.from({ length: 5 }, (_, i) => `<i class="${i < wk ? 'on' : ''}"></i>`).join('')}</span><b>${wk} / 5</b></div>
       <div class="sp-apps">
-        ${app('w', '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>', 'Workout', true)}
-        ${app('p', '<svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>', 'Pulse')}
-        ${app('t', '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>', 'Tunes')}
-        ${app('m', '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>', 'Map')}
+        ${app('w', '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>', 'Workout', 'home')}
+        ${app('p', '<svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>', 'Progress', 'progress')}
+        ${app('t', '<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>', 'History', 'history')}
+        ${app('m', '<svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9.5 2.5h5M12 2.5V5"/></svg>', 'Timer', 'rounds')}
       </div>
-      <p class="sp-hint">Tap <b>Workout</b> to open</p>
+      <p class="sp-hint">Tap an app to open</p>
     </div>`;
   document.body.append(el);
   const tick = () => {
@@ -1416,9 +1547,12 @@ function showSplash() {
   };
   tick(); clearInterval(splashT); splashT = setInterval(tick, 10000);
 }
-function hideSplash() {
+function hideSplash(b) {
   const el = document.getElementById('splash');
   if (!el) return;
+  const to = b?.dataset?.to;
+  if ((to === 'progress' || to === 'history') && !S.active) { ui.tab = to; ui.screen = null; render(); scrollTo(0, 0); }
+  if (to === 'rounds') openRounds();
   clearInterval(splashT);
   el.classList.add('out');
   setTimeout(() => el.remove(), 450);
@@ -1454,7 +1588,7 @@ const actions = {
     if (!s) return;
     const sec = Math.round(n(s.r)) || firstNum(ex.target) || 30;
     s.r = String(sec);
-    startWork(sec, { ex, set: s, label: ex.n, sub: `Set ${j + 1} of ${ex.sets.length}` });
+    startWork(sec, { ex, set: s, label: ex.n, sub: `Set ${j + 1} of ${ex.sets.length}` }, true);
     persist(); render();
   },
   assist: b => { const ex = cur().ex[+b.dataset.i]; ex.assist = !ex.assist; persist(); render(); },
@@ -1555,6 +1689,18 @@ const actions = {
   sheet: b => { const it = ui.sheet?.[+b.dataset.i]; closeSheet(); it?.fn(); },
   'sheet-x': closeSheet,
   'splash-go': hideSplash,
+  rounds: () => openRounds(),
+  'rt-x': closeRounds,
+  'rt-preset': b => { const [w, r, n] = b.dataset.v.split(',').map(Number); Object.assign(rtCfg(), { work: w, rest: r, rounds: n }); save(); rtReset(); },
+  'rt-adj': b => {
+    const c = rtCfg(), f = b.dataset.f, d = +b.dataset.d;
+    const lim = { work: [10, 600], rest: [0, 300], rounds: [1, 20], timer: [5, 3600] }[f];
+    c[f] = Math.max(lim[0], Math.min(lim[1], c[f] + d)); save(); rtReset();
+  },
+  'rt-go': rtToggle,
+  'rt-mode': b => { rtCfg().mode = b.dataset.v; save(); rtReset(); },
+  'rt-quick': b => { rtCfg().timer = +b.dataset.v; save(); rtReset(); },
+  'rt-reset': () => rtReset(),
   loc: openLocations,
   'loc-pick': b => { S.settings.where = b.dataset.v; save(); closeSheet(); render(); toast(`Working out at ${curLoc().name}`); },
   'loc-add': addLocation,
@@ -1584,7 +1730,7 @@ const actions = {
   'tm-pause': () => {
     const r = ui.rest; if (!r?.work || r.done) return;
     wakeAudio();
-    if (r.paused != null) { r.end = Date.now() + r.paused; r.paused = null; keepAwake(true); }
+    if (r.paused != null) { r.end = Date.now() + r.paused; r.paused = null; r.ready = false; keepAwake(true); }
     else { r.paused = Math.max(0, r.end - Date.now()); keepAwake(false); }
     renderRest(true);
   },
