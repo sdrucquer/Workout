@@ -600,8 +600,10 @@ html:has(#sheet.open), html:has(#sheet.open) body { overflow: hidden; }
 .sp-bars { display: flex; gap: 5px; }
 .sp-bars i { width: 22px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.2); }
 .sp-bars i.on { background: #2ee6d6; box-shadow: 0 0 6px #2ee6d6; }
-.sp-apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; justify-items: center; }
-.sp-app { position: relative; display: flex; flex-direction: column; align-items: center; gap: 7px; color: #ffe9d2; }
+.sp-apps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; justify-items: center; align-items: start; }
+.sp-app { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 7px; padding: 0; margin: 0; color: #ffe9d2; }
+.sp-app:active .sp-ic { transform: scale(.92); }
+.sp-ic { transition: transform .12s; }
 .sp-app small { font: 600 12px Inter, -apple-system, sans-serif; }
 .sp-app.hero small { color: #fff7ee; font-weight: 700; }
 .sp-ic { width: 62px; height: 62px; border-radius: 18px; display: flex; align-items: center; justify-content: center; }
@@ -619,3 +621,27 @@ html:has(#sheet.open), html:has(#sheet.open) body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   [data-theme="neon"] *, [data-theme="neon"] *::before, #splash * { animation-duration: .01s !important; animation-iteration-count: 1 !important; }
 }
+
+/* Today: finished workout card */
+.done-card { margin-top: 18px; padding: 16px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow); }
+.dn-head { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--accent); font-weight: 700; font-size: 15px; }
+.dn-head svg { width: 18px; height: 18px; stroke-width: 2.8; }
+.dn-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 6px; }
+.dn-stats div { padding: 10px 8px; border-radius: 12px; background: var(--surface-2); text-align: center; }
+.dn-stats b { display: block; font-size: 22px; font-weight: 800; letter-spacing: -.02em; line-height: 1.1; }
+.dn-stats span { font-size: 12px; color: var(--muted); }
+.dn-list { list-style: none; margin: 0; padding: 0; }
+.dn-list li { padding: 11px 0; border-bottom: 1px solid var(--line); }
+.dn-list li:last-child { border-bottom: 0; padding-bottom: 2px; }
+.dn-top { display: flex; align-items: center; gap: 8px; }
+.dn-top b { font-size: 16px; font-weight: 600; }
+.dn-pr { padding: 2px 7px; border-radius: 6px; background: var(--gold-soft); color: var(--gold); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.dn-sets { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 7px; }
+.dn-chip { padding: 4px 10px; border-radius: 8px; background: var(--surface-2); font-size: 14px; font-weight: 600; color: var(--text); }
+.dn-chip.pr { background: var(--gold-soft); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
+.dn-sets small { font-size: 13px; color: var(--muted); margin-left: 2px; }
+[data-theme="neon"] .done-card { border: 1px solid rgba(46,230,214,.35); box-shadow: 0 0 24px rgba(46,230,214,.08); }
+[data-theme="neon"] .dn-stats div { background: rgba(255,255,255,.05); border: 1px solid var(--line); }
+[data-theme="neon"] .dn-stats b { font-family: var(--nc-head); }
+[data-theme="neon"] .dn-chip { background: rgba(46,230,214,.12); color: #fff7ee; }
+[data-theme="neon"] .dn-chip.pr { background: rgba(255,200,87,.16); color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold), 0 0 10px rgba(255,200,87,.35); }

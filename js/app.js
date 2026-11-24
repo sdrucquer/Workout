@@ -385,6 +385,31 @@ function vDayHero(k) {
     <button class="btn link" data-act="day" data-v="${dk(new Date())}">Back to today</button>`;
 }
 
+// Today's finished workout: totals up top, then each exercise with its sets as chips (PRs in gold).
+function vDoneCard(w) {
+  const exs = w.ex.filter(hasData);
+  const sets = exs.reduce((t, ex) => t + (ex.run ? 0 : doneSets(ex).length), 0);
+  const vol = exs.reduce((t, ex) => t + (ex.t === 'w' ? doneSets(ex).reduce((b, s) => b + n(s.w) * n(s.r), 0) : 0), 0);
+  const chip = (ex, s) => ex.t === 't' ? `${fw(n(s.r))}s`
+    : ex.t === 'bw' ? (sw(ex, s) ? `${sgn(sw(ex, s))}×${fw(n(s.r))}` : fw(n(s.r)))
+    : `${fw(n(s.w))}×${fw(n(s.r))}`;
+  const rows = exs.map(ex => {
+    if (ex.run) return `<li><div class="dn-top"><b>${esc(ex.n)}</b></div><div class="dn-sets"><span class="dn-chip">${esc(fmtRun(ex))}</span></div></li>`;
+    const ds = ex.sets.map((s, j) => [s, j]).filter(([s]) => s.d);
+    const anyPR = ds.some(([, j]) => isPR(ex, j, w.start));
+    return `<li><div class="dn-top"><b>${esc(ex.n)}</b>${anyPR ? '<span class="dn-pr">PR</span>' : ''}</div>
+      <div class="dn-sets">${ds.map(([s, j]) => `<span class="dn-chip ${isPR(ex, j, w.start) ? 'pr' : ''}">${esc(chip(ex, s))}</span>`).join('')}${ex.t === 'bw' && !ds.some(([s]) => sw(ex, s)) ? '<small>reps</small>' : ''}</div></li>`;
+  }).join('');
+  return `<section class="done-card">
+    <p class="dn-head">${I.check} Done today</p>
+    <div class="dn-stats">
+      <div><b>${mins(w.end - w.start)}</b><span>min</span></div>
+      <div><b>${sets}</b><span>sets</span></div>
+      ${vol ? `<div><b>${Math.round(vol).toLocaleString()}</b><span>${unit()} volume</span></div>` : `<div><b>${exs.length}</b><span>exercises</span></div>`}
+    </div>
+    <ul class="dn-list">${rows}</ul>
+  </section>`;
+}
 const preview = p => `<ul class="preview">${p.ex.map(e => `<li><span>${esc(e.n)}${e.alts?.length ? ` <small class="muted">or ${esc(e.alts.map(x => x.n).join(', '))}</small>` : ''}</span><span>${e.sets ? `${e.sets} × ` : ''}${esc(e.target)}</span></li>`).join('')}</ul>`;
 
 function vHome() {
@@ -409,8 +434,7 @@ function vHome() {
     hero = `
       <p class="eyebrow">${DAYS[day]}</p>
       <h2 class="big">${esc(todayDone.title)}</h2>
-      <ul class="preview">${todayDone.ex.filter(hasData).map(ex => `<li><span>${esc(ex.n)}</span><span>${esc(ex.run ? fmtRun(ex) : fmtSets(ex, doneSets(ex)))}</span></li>`).join('')}</ul>
-      <p class="done-note">${I.check} Done today · ${mins(todayDone.end - todayDone.start)} min</p>
+      ${vDoneCard(todayDone)}
       <button class="btn ghost xl" data-act="open-session" data-id="${todayDone.id}">View Workout</button>
       ${nx ? `<p class="muted small">Next in your cycle: ${esc(nx.title)}</p>` : ''}`;
   } else if (show != null) {
@@ -1389,9 +1413,9 @@ function showSplash() {
     `<i class="sp-star" style="left:${(x / 3.9).toFixed(1)}%;top:${y}px;animation-delay:${i * .6}s"></i>`).join('');
   const bldg = [[26, 38], [20, 58], [34, 80, 1], [22, 50], [30, 66], [0, 0], [24, 46], [38, 84, 2], [22, 60], [28, 42]].map(([w, h, k]) =>
     w ? `<span class="${k === 2 ? 'top' : ''}" style="width:${w}px;height:${h}px">${k ? '<i></i><i></i><i></i>' : ''}</span>` : '<b></b>').join('');
-  const app = (cls, icon, label, act) => act
-    ? `<button class="sp-app hero" data-act="splash-go"><span class="sp-ic ${cls}">${icon}</span>${pending ? '<em>1</em>' : ''}<small>${label}</small></button>`
-    : `<span class="sp-app"><span class="sp-ic ${cls}">${icon}</span><small>${label}</small></span>`;
+  // Every icon opens the app: Workout on Today, the others on their own screen.
+  const app = (cls, icon, label, to) =>
+    `<button class="sp-app ${to === 'home' ? 'hero' : ''}" data-act="splash-go" data-to="${to}"><span class="sp-ic ${cls}">${icon}</span>${to === 'home' && pending ? '<em>1</em>' : ''}<small>${label}</small></button>`;
   el.innerHTML = `<div class="sp-sky"></div>${stars}
     <div class="sp-sunbox"><div class="sp-sun"></div></div>
     <div class="sp-city">${bldg}</div>
@@ -1401,12 +1425,12 @@ function showSplash() {
     <div class="sp-dock">
       <div class="sp-week"><span>This week</span><span class="sp-bars">${Array.from({ length: 5 }, (_, i) => `<i class="${i < wk ? 'on' : ''}"></i>`).join('')}</span><b>${wk} / 5</b></div>
       <div class="sp-apps">
-        ${app('w', '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>', 'Workout', true)}
-        ${app('p', '<svg viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>', 'Pulse')}
-        ${app('t', '<svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>', 'Tunes')}
-        ${app('m', '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>', 'Map')}
+        ${app('w', '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>', 'Workout', 'home')}
+        ${app('p', '<svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>', 'Progress', 'progress')}
+        ${app('t', '<svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>', 'History', 'history')}
+        ${app('m', '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>', 'Location', 'loc')}
       </div>
-      <p class="sp-hint">Tap <b>Workout</b> to open</p>
+      <p class="sp-hint">Tap an app to open</p>
     </div>`;
   document.body.append(el);
   const tick = () => {
@@ -1416,9 +1440,12 @@ function showSplash() {
   };
   tick(); clearInterval(splashT); splashT = setInterval(tick, 10000);
 }
-function hideSplash() {
+function hideSplash(b) {
   const el = document.getElementById('splash');
   if (!el) return;
+  const to = b?.dataset?.to;
+  if ((to === 'progress' || to === 'history') && !S.active) { ui.tab = to; ui.screen = null; render(); scrollTo(0, 0); }
+  if (to === 'loc' && !S.active) { ui.tab = 'home'; ui.screen = null; render(); openLocations(); }
   clearInterval(splashT);
   el.classList.add('out');
   setTimeout(() => el.remove(), 450);
