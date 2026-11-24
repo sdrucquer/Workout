@@ -407,3 +407,16 @@ svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width:
 .pe-grid label.wide { grid-column: 1 / -1; }
 .pe-grid span { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .pe-ex .muted.small { margin: 10px 0 0; }
+
+.loc-pill { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 8px 12px 8px 10px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow); font-weight: 600; font-size: 15px; }
+.loc-pill svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.loc-pill svg:last-child { width: 14px; height: 14px; color: var(--muted); }
+.loc-row { display: flex; align-items: center; gap: 6px; }
+.loc-opt { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 60px; padding: 10px 16px; border-radius: 14px; background: var(--surface); text-align: left; border: 2px solid transparent; }
+.loc-opt.on { border-color: var(--accent); }
+.loc-opt b { display: block; font-size: 17px; }
+.loc-opt small { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+.loc-opt svg { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.set-loc { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
+.set-loc > span { width: 64px; flex: none; font-size: 14px; font-weight: 600; color: var(--muted); }
+.set-loc .chip { padding: 8px 14px; font-size: 14px; }
