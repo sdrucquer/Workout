@@ -713,3 +713,4 @@ html:has(#sheet.open), html:has(#sheet.open) body { overflow: hidden; }
 [data-theme="neon"] .tm-ripple { border-color: var(--pink); box-shadow: 0 0 18px rgba(255,61,139,.6); }
 @media (prefers-reduced-motion: reduce) { .tm-ring, .rt-ring, .tm-ripple { animation: none !important; } }
 .rt-mode { margin: 0; }
+.switch-lbl { margin-top: 26px; }
