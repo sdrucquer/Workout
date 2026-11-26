@@ -1586,7 +1586,7 @@ const actions = {
       ]);
     }
   },
-  'warm-timer': b => { const x = S.active?.warm[+b.dataset.j]; if (x?.sec) startWork(x.sec, { warm: x, label: x.n, sub: 'Warm-up' }); },
+  'warm-timer': b => { const x = S.active?.warm[+b.dataset.j]; if (x?.sec) startWork(x.sec, { warm: x, label: x.n, sub: 'Warm-up' }, true); },
   'set-timer': b => {
     const i = +b.dataset.i, j = +b.dataset.j, ex = S.active?.ex[i], s = ex?.sets[j];
     if (!s) return;
