@@ -430,7 +430,7 @@ function vHome() {
       <h2 class="big">${esc(a.title)}</h2>
       <p class="muted">${a.ex.filter(hasData).length} of ${a.ex.length} exercises logged</p>
       <button class="btn primary xl" data-act="resume">Resume Workout</button>
-      <p class="eyebrow switch-lbl">${a.ex.some(hasData) ? 'Switch workout · discards this one' : 'Switch workout'}</p>
+      <p class="eyebrow switch-lbl">Switch workout</p>
       <div class="chips">${ORDER.filter(d => prog()[d]).map(here).filter(d => d !== a.day).map(d =>
         `<button class="chip" data-act="start" data-day="${d}">${esc(prog()[d].short)}</button>`).join('')}</div>`;
   } else if (todayDone) {
@@ -1307,8 +1307,8 @@ function cleanSession(w) {
 function startWorkout(day) {
   if (S.active) {
     if (S.active.day === day) return resume();
-    // Nothing logged yet (picked the wrong one): just switch.
-    if (S.active.ex.some(hasData) && !confirm(`Discard your unfinished ${S.active.title} workout?`)) return;
+    const logged = S.active.ex.some(hasData);
+    if (!confirm(logged ? `Switch to ${prog()[day]?.title}? Your unfinished ${S.active.title} will be discarded.` : `Switch from ${S.active.title} to ${prog()[day]?.title}?`)) return;
   }
   S.active = buildSession(day);
   ui.warmOpen = false; ui.rest = null;
