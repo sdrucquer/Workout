@@ -107,6 +107,7 @@ const I = {
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
   pin: '<svg viewBox="0 0 24 24"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M14 6l4 4"/></svg>',
 };
 
 // ---------- program ----------
@@ -127,7 +128,9 @@ const newKey = () => Math.max(99, ...Object.keys({ ...DEFAULTS, ...(S.program ||
 // The gym workout a workout stands in for (Push · Home → Push).
 const baseDay = d => prog()[d]?.of ?? d;
 // Locations: School (the main program), Home, Travel, plus any added in the app (S.locs).
-const locs = () => (S.settings.own ? (S.locs?.length ? S.locs : [{ id: 'school', name: 'Gym' }]) : [...LOCATIONS, ...(S.locs || [])]);
+// Built-in places can be renamed; the new names live in settings.locNames.
+const locs = () => (S.settings.own ? (S.locs?.length ? S.locs : [{ id: 'school', name: 'Gym' }])
+  : [...LOCATIONS.map(l => ({ ...l, name: S.settings.locNames?.[l.id] || l.name })), ...(S.locs || [])]);
 const curLoc = () => locs().find(l => l.id === S.settings.where) || locs()[0];
 const locDays = id => (id === 'school' ? order()
   : Object.keys(prog()).map(Number).filter(d => prog()[d].loc === id).sort((a, b) => a - b));
@@ -967,9 +970,10 @@ function openLocations() {
       <button class="loc-opt ${l.id === cur ? 'on' : ''}" data-act="loc-pick" data-v="${esc(l.id)}">
         <span><b>${esc(l.name)}</b><small>${esc(l.note || locDays(l.id).map(d => prog()[d].short).join(' · '))}</small></span>
         ${l.id === cur ? I.check : ''}</button>
+      <button class="icon sm" data-act="loc-ren" data-v="${esc(l.id)}" aria-label="Rename ${esc(l.name)}">${I.pencil}</button>
       ${l.custom ? `<button class="icon sm" data-act="loc-del" data-v="${esc(l.id)}" aria-label="Remove ${esc(l.name)}">✕</button>` : ''}</div>`).join('')}
     <button class="btn link" data-act="loc-add">${I.plus} Add a location</button>
-    <p class="muted small center">Speed + Core and runs stay the same everywhere. Edit any location's workouts in Settings.</p>
+    <p class="muted small center">${S.settings.own ? '' : 'Speed + Core and runs stay the same everywhere. '}Edit any location's workouts in Settings.</p>
     <button class="sheet-btn cancel" data-act="sheet-x">Done</button></div>`;
   $sheet.classList.add('open');
 }
@@ -994,6 +998,21 @@ function addLocation() {
   save(); closeSheet(); render();
   toast(`Added ${name} · edit its workouts in Settings`);
 }
+function renameLocation(id) {
+  const l = locs().find(x => x.id === id); if (!l) return;
+  const name = (prompt('Rename this place', l.name) || '').trim();
+  if (!name || name === l.name) return;
+  const mine = (S.locs || []).find(x => x.id === id);
+  if (mine) mine.name = name;
+  else (S.settings.locNames ||= {})[id] = name;
+  // "Push · Home" becomes "Push · Grandma's"
+  const suffix = ` · ${l.name}`;
+  for (const d of locDays(id)) {
+    const p = prog()[d];
+    if (p.title.endsWith(suffix)) { S.program ||= clone(DEFAULTS); S.program[d] = { ...clone(p), title: p.title.slice(0, -suffix.length) + ` · ${name}` }; }
+  }
+  save(); openLocations(); render(); toast(`Renamed to ${name}`);
+}
 function removeLocation(id) {
   const l = (S.locs || []).find(x => x.id === id);
   if (!l || !confirm(`Remove ${l.name} and its workouts? Workouts you've logged there stay in History.`)) return;
@@ -1009,6 +1028,7 @@ function addProgram(locId) {
   const blank = (title, extra = {}) => ({ title, short: '', warmup: [], ex: [], ...extra });
   const open = (d, def) => {
     ui.pd = d; ui.draft = def; ui.progBack = null; ui.progOrig = JSON.stringify(def); ui.progNew = true;
+    ui.draftDay = d < 7 ? d : 'none';
     ui.screen = 'prog'; render(); scrollTo(0, 0);
     setTimeout(() => $app.querySelector('[data-pf=title]')?.select(), 50);
   };
@@ -1029,6 +1049,17 @@ function addProgram(locId) {
       fn: () => open(newKey(), blank(`${prog()[d].short} · ${loc.name}`, { short: prog()[d].short, of: d, loc: locId })),
     }))), 260);
   }
+}
+// Re-key a workout: its place versions, past sessions and any workout in progress follow it,
+// so the cycle and "next up" stay right.
+function moveProgram(from, to) {
+  S.program ||= clone(DEFAULTS);
+  for (const k of Object.keys(prog()).map(Number)) {
+    if (prog()[k].of === from) S.program[k] = { ...clone(prog()[k]), of: to };
+  }
+  if (S.settings.own || !DEFAULTS[from]) delete S.program[from]; else S.program[from] = null;
+  for (const x of S.sessions) if (x.day === from) x.day = to;
+  if (S.active?.day === from) S.active.day = to;
 }
 function deleteProgram() {
   const d = ui.pd, p = prog()[d];
@@ -1082,6 +1113,13 @@ function applyTemplate() {
       }
     }
     S.locs.push({ id, name, custom: true });
+  }
+  // Point past sessions at the matching new workout (by name) so "next up" carries on.
+  const byName = new Map(order().flatMap(d => [[prog()[d].title.toLowerCase(), d], [prog()[d].short.toLowerCase(), d]]));
+  for (const x of S.sessions) {
+    if (prog()[x.day]) continue;
+    const base = (x.title || '').split(' · ')[0].trim().toLowerCase();
+    if (byName.has(base)) x.day = byName.get(base);
   }
   Object.assign(S.settings, { own: true, onboarded: true, where: 'school', theme: S.settings.theme === 'auto' ? 'neon' : S.settings.theme, template: t.id });
   save(); applyTheme();
@@ -1172,6 +1210,7 @@ function openProgram(d, back = null) {
   const p = clone(prog()[d]);
   p.warmup = (p.warmup || []).map(normWarm);
   ui.pd = d; ui.draft = p; ui.progBack = back; ui.progOrig = JSON.stringify(p);
+  ui.draftDay = d < 7 ? d : 'none';
   closeSheet();
   ui.screen = 'prog'; render(); scrollTo(0, 0);
 }
@@ -1207,6 +1246,13 @@ function vProgram() {
       <section class="card when">
         <label><span>Name</span><input class="text-in" data-pf="title" value="${esc(p.title)}"></label>
         <label><span>Short name</span><input class="text-in" data-pf="short" value="${esc(p.short)}"></label>
+        ${p.loc ? '' : (() => {
+          const taken = new Set(order().filter(k => k < 7 && k !== ui.pd));
+          return `<div class="pe-days"><span>Day</span><div class="chips">${[1, 2, 3, 4, 5, 6, 0].map(k =>
+            `<button class="chip ${ui.draftDay === k ? 'on' : ''}" data-act="pe-day" data-v="${k}" ${taken.has(k) ? `disabled aria-label="${DAYS[k]} (taken)"` : ''}>${DAYS[k].slice(0, 3)}</button>`).join('')}
+            <button class="chip ${ui.draftDay === 'none' ? 'on' : ''}" data-act="pe-day" data-v="none">No set day</button></div>
+            <small class="muted">Days with another workout are greyed out.</small></div>`;
+        })()}
       </section>
       ${S.active?.day === ui.pd ? '<p class="pe-live">You’re doing this workout now. Saving updates it right away and keeps the sets you’ve logged.</p>' : ''}
       <p class="eyebrow">Warm-up · reps, and time as digits (200 = 2:00)</p>
@@ -1241,8 +1287,13 @@ function saveProgram() {
     if (!['run', 'strides'].includes(e.t)) e.sets = Math.max(1, Math.round(n(e.sets)) || 3);
   }
   const old = prog()[d];
-  saveProgramDay(d, p);
-  if (S.active?.day === d) { applyToActive(old, p); save(); toast('Saved · updated this workout too'); }
+  // Moved to another day (or off the calendar)?
+  let to = d;
+  if (!p.loc) to = ui.draftDay === 'none' ? (d < 7 ? newKey() : d) : ui.draftDay;
+  if (to !== d && !ui.progNew) moveProgram(d, to);
+  saveProgramDay(to, p);
+  if (S.active?.day === to && old) { applyToActive(old, p); save(); toast(to !== d ? `Saved · moved to ${to < 7 ? DAYS[to] : 'no set day'}` : 'Saved · updated this workout too'); }
+  else if (to !== d) toast(`Saved · moved to ${to < 7 ? DAYS[to] : 'no set day'}`);
   else toast('Saved');
   leaveProgram();
 }
@@ -1884,6 +1935,8 @@ const actions = {
   'loc-pick': b => { S.settings.where = b.dataset.v; save(); closeSheet(); render(); toast(`Working out at ${curLoc().name}`); },
   'loc-add': addLocation,
   'loc-del': b => removeLocation(b.dataset.v),
+  'loc-ren': b => renameLocation(b.dataset.v),
+  'pe-day': b => { ui.draftDay = b.dataset.v === 'none' ? 'none' : +b.dataset.v; render(); },
   set: b => {
     const k = b.dataset.k, v = b.dataset.v;
     S.settings[k] = v === 'true' ? true : v === 'false' ? false : v;
