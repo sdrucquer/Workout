@@ -857,3 +857,9 @@ html:has(#sheet.open), html:has(#sheet.open) body { overflow: hidden; }
 [data-theme="neon"] .in-help { border: 1px solid var(--line); }
 .in-safari .btn { white-space: nowrap; font-size: 15px; letter-spacing: .02em; padding: 0 10px; min-height: 50px; }
 .in-safari + .muted { margin-top: 14px; }
+/* Measured on iOS 26 Safari: the ••• button's centre is ~58pt in from the right edge,
+   and the floating toolbar sits over the page, so the arrow rests just above it. */
+.in-arrow.bottom-right { right: 36px; bottom: calc(10px + var(--safe-b)); }
+.dm-phone { width: 168px; height: 252px; border-radius: 30px; }
+.dm-screen { border-radius: 23px; }
+.install { padding-bottom: 170px; }
