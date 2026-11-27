@@ -316,6 +316,7 @@ function render() {
   else if (ui.screen === 'summary') html = vSummary();
   else if (ui.screen === 'prog') html = vProgram();
   else if (ui.screen === 'onboard') html = vOnboard();
+  else if (ui.screen === 'install') html = vInstall();
   else html = (ui.tab === 'home' ? vHome() : ui.tab === 'progress' ? vProgress() : vHistory()) + vTabs();
   $app.innerHTML = html;
   if (ui.screen === 'detail') bindChart();
@@ -1069,6 +1070,98 @@ function deleteProgram() {
   for (const k of [d, ...kids]) { if (S.settings.own) delete S.program[k]; else S.program[k] = null; }
   if (S.active?.day === d) S.active = null;
   save(); leaveProgram(); toast('Deleted');
+}
+
+// ---------- add to Home Screen (before setup) ----------
+// On iPhone the Home Screen app keeps its own storage, separate from Safari, so
+// setup done in a Safari tab wouldn't carry over. New phones add the app first.
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const UA = navigator.userAgent;
+const isIOS = /iPhone|iPad|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isAndroid = /Android/.test(UA);
+const iosOtherBrowser = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(UA);
+let installEvt = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (ui.screen === 'install') render(); });
+addEventListener('appinstalled', () => { if (ui.screen === 'install') { ui.installed = true; render(); } });
+// Which steps to show: iOS 26+ Safari hides Share behind the ••• button; older iOS shows it in the toolbar.
+const iosVer = () => +(UA.match(/Version\/(\d+)/)?.[1] || UA.match(/OS (\d+)_/)?.[1] || 0);
+function installFlow() {
+  if (isAndroid) return {
+    kind: 'android', arrow: 'top-right',
+    steps: [['Tap ⋮', 'Top right of Chrome'], ['Tap Add to Home screen', 'Or "Install app"'], ['Tap Install', ''], ['Open the new icon', 'Setup starts there']],
+  };
+  if (iosVer() >= 26) return {
+    kind: 'ios26', arrow: 'bottom-right',
+    steps: [['Tap •••', 'Bottom right, next to the address bar'], ['Tap Share', 'At the top of the menu'], ['Tap Add to Home Screen', 'Don’t see it? Tap View More or scroll down'], ['Tap Add', 'Keep "Open as Web App" on'], ['Open the new icon', 'Setup starts there']],
+  };
+  return {
+    kind: 'ios', arrow: 'bottom-center',
+    steps: [['Tap the Share button', 'The square with an arrow, at the bottom'], ['Tap Add to Home Screen', 'Scroll down the list if you don’t see it'], ['Tap Add', 'Top right corner'], ['Open the new icon', 'Setup starts there']],
+  };
+}
+// A small drawn phone that plays each tap in turn (the last step, opening the icon, is the home screen).
+function installFrame(kind, i) {
+  const page = `<div class="dm-page"><i></i><i></i><i class="s"></i></div>`;
+  const tap = '<b class="dm-tap"></b>';
+  const shareIc = '<svg viewBox="0 0 24 24"><path d="M12 15V3M8 7l4-4 4 4"/><path d="M6 11H5a1 1 0 00-1 1v8a1 1 0 001 1h14a1 1 0 001-1v-8a1 1 0 00-1-1h-1"/></svg>';
+  const sheet = (hot) => `<div class="dm-sheet"><div class="dm-grab"></div>
+      <div class="dm-row">Copy</div><div class="dm-row">Add to Reading List</div><div class="dm-row">Add Bookmark</div>
+      <div class="dm-row ${hot ? 'hot' : ''}"><span>Add to Home Screen</span><em>⊞</em>${hot ? tap : ''}</div><div class="dm-row">Find on Page</div></div>`;
+  const addDlg = (toggle) => `<div class="dm-add"><div class="dm-addbar"><span>Cancel</span><b>Add to Home Screen</b><span class="hot">Add${tap}</span></div>
+      <div class="dm-addrow"><span class="dm-ic"></span><span class="dm-name">Workout</span></div>
+      ${toggle ? '<div class="dm-toggle"><span>Open as Web App</span><i class="on"></i></div>' : ''}</div>`;
+  const homeScreen = `<div class="dm-home">${'<i></i>'.repeat(7)}<i class="app">${tap}</i></div>`;
+  if (kind === 'ios26') return [
+    `${page}<div class="dm-bar26"><span class="dm-back">‹</span><span class="dm-url">workout app</span><span class="dm-more hot">•••${tap}</span></div>`,
+    `${page}<div class="dm-menu"><div class="dm-row hot"><em>${shareIc}</em><span>Share</span>${tap}</div><div class="dm-row">Add to Bookmarks</div><div class="dm-row">Add Bookmark to…</div><div class="dm-row">New Tab</div></div><div class="dm-bar26"><span class="dm-back">‹</span><span class="dm-url">workout app</span><span class="dm-more">•••</span></div>`,
+    `${page}<div class="dm-sheet26"><div class="dm-sh-head"><span class="dm-ic"></span><span><b>Workout</b><small>sdrucquer.github.io</small></span></div>
+      <div class="dm-circles"><i>Copy</i><i>Bookmark</i><i>Reading List</i><i class="more">View More</i></div>
+      <div class="dm-list"><div class="dm-row">Add to Favorites</div><div class="dm-row">Find on Page</div><div class="dm-row hot"><em>⊞</em><span>Add to Home Screen</span>${tap}</div></div></div>`,
+    `${page}${addDlg(true)}`,
+    homeScreen][i];
+  if (kind === 'ios') return [
+    `${page}<div class="dm-url-top">workout app</div><div class="dm-bar"><span>‹</span><span>›</span><span class="hot">${shareIc}${tap}</span><span>▢</span><span>⧉</span></div>`,
+    `${page}${sheet(true)}`,
+    `${page}${addDlg(false)}`,
+    homeScreen][i];
+  return [
+    `<div class="dm-chrome"><span class="dm-url">workout app</span><span class="hot">⋮${tap}</span></div>${page}`,
+    `<div class="dm-chrome"><span class="dm-url">workout app</span><span>⋮</span></div>${page}<div class="dm-amenu"><div class="dm-row">New tab</div><div class="dm-row">Bookmarks</div><div class="dm-row hot"><span>Add to Home screen</span>${tap}</div></div>`,
+    `${page}<div class="dm-adlg"><b>Install app?</b><span class="dm-ic"></span><div class="dm-abtn"><span>Cancel</span><span class="hot">Install${tap}</span></div></div>`,
+    homeScreen][i];
+}
+let installT = 0;
+function tickInstall() {
+  clearInterval(installT);
+  if (ui.screen !== 'install' || installEvt || ui.installed) return;
+  installT = setInterval(() => {
+    if (ui.screen !== 'install') return clearInterval(installT);
+    const f = installFlow();
+    ui.inStep = ((ui.inStep || 0) + 1) % f.steps.length;
+    const box = document.querySelector('.dm-screen'), list = document.querySelectorAll('.in-steps li');
+    if (box) { box.innerHTML = installFrame(f.kind, ui.inStep); box.classList.remove('swap'); void box.offsetWidth; box.classList.add('swap'); }
+    list.forEach((li, j) => li.classList.toggle('on', j === ui.inStep));
+  }, 2600);
+}
+function vInstall() {
+  const f = installFlow(), cur = ui.inStep || 0;
+  setTimeout(tickInstall, 0);
+  let how;
+  if (ui.installed) how = `<p class="in-done">${I.check} Added. Open it from your Home Screen to finish setup.</p>`;
+  else if (installEvt) how = `<button class="btn primary xl" data-act="install-go">${I.plus} Add to Home Screen</button>
+    <p class="muted small center">Then open it from your Home Screen to finish setup.</p>`;
+  else how = `
+    <div class="in-demo" aria-hidden="true"><div class="dm-phone"><div class="dm-screen">${installFrame(f.kind, cur)}</div></div></div>
+    <ol class="in-steps">${f.steps.map(([t, sub], j) => `<li class="${j === cur ? 'on' : ''}"><span class="in-n">${j + 1}</span><span><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</span></li>`).join('')}</ol>
+    ${iosOtherBrowser ? '<p class="muted small">Using Chrome or another app? If you don’t see Add to Home Screen, open this link in Safari.</p>' : ''}
+    <div class="in-arrow ${f.arrow}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v15M6 13l6 6 6-6"/></svg></div>`;
+  return `<main class="page onboard install">
+    <p class="ob-kick">Before you start</p>
+    <h1 class="big">Add it to your Home Screen</h1>
+    <p class="muted">It opens full screen like a real app and keeps your workouts on your phone. Takes 10 seconds.</p>
+    ${how}
+    <button class="btn link in-skip" data-act="install-skip">Use it in the browser instead</button>
+  </main>`;
 }
 
 // ---------- first-time setup ----------
@@ -1831,6 +1924,11 @@ const actions = {
   starter: () => { if (S.active) { toast('Finish or discard your current workout first'); return; } if (confirm('Pick a new starter program? It replaces your workouts and locations. Your history stays.')) openOnboard(1); },
   'share-app': shareApp,
   'ob-next': () => obNext(),
+  'install-go': async () => { if (!installEvt) return; installEvt.prompt(); const r = await installEvt.userChoice.catch(() => null); installEvt = null; if (r?.outcome === 'accepted') ui.installed = true; render(); },
+  'install-skip': () => {
+    if (isIOS && !confirm('Heads up: on iPhone, workouts saved in the browser won’t show up if you add the app to your Home Screen later. Continue in the browser?')) return;
+    openOnboard(0);
+  },
   'ob-back': () => { ui.ob.step = Math.max(0, ui.ob.step - 1); render(); scrollTo(0, 0); },
   'ob-tpl': b => { ui.ob.tpl = b.dataset.v; render(); },
   'ob-unit': b => { S.settings.unit = b.dataset.v; save(); render(); },
@@ -2093,7 +2191,10 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => re
 applyTheme();
 const firstRun = needsOnboard();
 if (!firstRun && isNeon() && S.settings.splash !== false) showSplash();
-if (firstRun) { S.settings.theme = 'neon'; applyTheme(); openOnboard(0); }
+if (firstRun) {
+  S.settings.theme = 'neon'; applyTheme();
+  if (!isStandalone() && (isIOS || isAndroid)) { ui.screen = 'install'; } else openOnboard(0);
+}
 else if (S.active) ui.screen = 'workout';
 render();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
