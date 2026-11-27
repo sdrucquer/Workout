@@ -205,3 +205,75 @@ export const TRAVEL = {
     ],
   },
 };
+
+// ---------- Starter programs (for new people setting up the app) ----------
+// Keys are days of the week (0 = Sunday … 6 = Saturday): the calendar shows each
+// workout on its day, and the cycle runs them Monday-first. Extra locations are
+// made in setup as copies of these, unless a program brings its own (`locs`).
+const W = (k, n, sets, target, rest = 90, more = {}) => ({ k, n, t: 'w', sets, target, rest, ...more });
+const BW = (k, n, sets, target, rest = 60, more = {}) => ({ k, n, t: 'bw', sets, target, rest, ...more });
+const T = (k, n, sets, target, rest = 45, more = {}) => ({ k, n, t: 't', sets, target, rest, ...more });
+const UPPER_WARM = [{ n: 'Arm circles', reps: '10' }, { n: 'Band pull-aparts', reps: '15' }, { n: 'Light warm-up set', reps: '10' }];
+const LOWER_WARM = [{ n: 'Bodyweight squats', reps: '10' }, { n: 'Leg swings', reps: '10/side' }, { n: 'Glute bridges', reps: '10' }, { n: 'Light warm-up set', reps: '8' }];
+
+export const TEMPLATES = [
+  {
+    id: 'shanin', name: "Shanin's hybrid", days: 'Push · Speed · Pull · Legs · Long run',
+    blurb: 'Five days: three lifts, a speed + core day and a long run. Comes with Home and Travel versions.',
+    program: PROGRAM, locs: [{ id: 'home', name: 'Home', days: HOME }, { id: 'travel', name: 'Travel', days: TRAVEL }],
+  },
+  {
+    id: 'ppl', name: 'Push / Pull / Legs', days: 'Mon Push · Wed Pull · Fri Legs',
+    blurb: 'The classic three-day split. Chest, shoulders and triceps; back and biceps; legs.',
+    program: {
+      1: { title: 'Push', short: 'Push', warmup: UPPER_WARM, ex: [
+        W('bench', 'Bench Press', 3, '6–8', 150, { major: true }), W('incline-db', 'Incline DB Press', 3, '8–10', 120, { major: true }),
+        W('db-shoulder', 'DB Shoulder Press', 3, '8–10', 120), W('lateral', 'Lateral Raises', 3, '12–15', 60),
+        W('rope-pushdown', 'Triceps Pushdown', 3, '10–15', 60), W('oh-triceps', 'Overhead Triceps Extension', 2, '10–12', 60)] },
+      3: { title: 'Pull', short: 'Pull', warmup: [{ n: 'Band pull-aparts', reps: '15' }, { n: 'Dead hang', sec: 30 }, { n: 'Light warm-up set', reps: '10' }], ex: [
+        BW('pullup', 'Pull-ups', 3, '6–10', 120, { major: true, alts: [{ k: 'lat-pulldown', n: 'Lat Pulldown', t: 'w' }] }),
+        W('row', 'Barbell Row', 3, '8–10', 120, { major: true }), W('sa-db-row', 'Single-Arm DB Row', 2, '10–12/side', 60),
+        W('face-pull', 'Face Pulls', 3, '15–20', 45), W('curl', 'DB Curls', 3, '8–12', 60), W('hammer-curl', 'Hammer Curls', 2, '10–12', 60)] },
+      5: { title: 'Legs', short: 'Legs', warmup: LOWER_WARM, ex: [
+        W('back-squat', 'Back Squat', 3, '5–8', 180, { major: true }), W('rdl', 'Romanian Deadlift', 3, '6–8', 150, { major: true }),
+        W('leg-press', 'Leg Press', 3, '10–12', 120, { alts: [{ k: 'bss', n: 'Bulgarian Split Squat' }] }),
+        W('leg-curl', 'Leg Curl', 3, '10–12', 60), W('calf', 'Calf Raises', 3, '12–15', 60), BW('knee-raise', 'Hanging Knee Raises', 2, '10–12', 45)] },
+    },
+  },
+  {
+    id: 'ul', name: 'Upper / Lower', days: 'Mon Upper · Tue Lower · Thu Upper · Fri Lower',
+    blurb: 'Four days. Each muscle twice a week: a heavier day and a lighter, higher-rep day.',
+    program: {
+      1: { title: 'Upper A', short: 'Upper A', warmup: UPPER_WARM, ex: [
+        W('bench', 'Bench Press', 4, '5–7', 150, { major: true }), W('row', 'Barbell Row', 4, '6–8', 120, { major: true }),
+        W('db-shoulder', 'DB Shoulder Press', 3, '8–10', 90), BW('pullup', 'Pull-ups', 3, '6–10', 90),
+        W('curl', 'DB Curls', 2, '10–12', 60), W('rope-pushdown', 'Triceps Pushdown', 2, '10–12', 60)] },
+      2: { title: 'Lower A', short: 'Lower A', warmup: LOWER_WARM, ex: [
+        W('back-squat', 'Back Squat', 4, '5–7', 180, { major: true }), W('rdl', 'Romanian Deadlift', 3, '6–8', 150, { major: true }),
+        W('walk-lunge-db', 'DB Walking Lunges', 2, '10/leg', 90), W('calf', 'Calf Raises', 3, '12–15', 60), T('plank', 'Plank', 2, '45–60s')] },
+      4: { title: 'Upper B', short: 'Upper B', warmup: UPPER_WARM, ex: [
+        W('incline-db', 'Incline DB Press', 3, '8–12', 120, { major: true }), W('lat-pulldown', 'Lat Pulldown', 3, '10–12', 90, { major: true }),
+        W('sa-db-row', 'Single-Arm DB Row', 3, '10–12/side', 60), W('lateral', 'Lateral Raises', 3, '12–15', 60),
+        W('hammer-curl', 'Hammer Curls', 2, '10–12', 60), W('oh-triceps', 'Overhead Triceps Extension', 2, '10–12', 60)] },
+      5: { title: 'Lower B', short: 'Lower B', warmup: LOWER_WARM, ex: [
+        W('deadlift', 'Deadlift', 3, '3–5', 180, { major: true }), W('leg-press', 'Leg Press', 3, '10–12', 120),
+        W('bss', 'Bulgarian Split Squat', 2, '8–10/leg', 90), W('leg-curl', 'Leg Curl', 3, '10–12', 60), BW('knee-raise', 'Hanging Knee Raises', 2, '10–12', 45)] },
+    },
+  },
+  {
+    id: 'fb', name: 'Full body', days: 'Mon · Wed · Fri',
+    blurb: 'Three full-body sessions. Great for getting started or a busy week.',
+    program: {
+      1: { title: 'Full Body A', short: 'Full A', warmup: LOWER_WARM, ex: [
+        W('back-squat', 'Back Squat', 3, '6–8', 150, { major: true }), W('bench', 'Bench Press', 3, '6–8', 150, { major: true }),
+        W('row', 'Barbell Row', 3, '8–10', 90), W('lateral', 'Lateral Raises', 2, '12–15', 60), T('plank', 'Plank', 2, '45–60s')] },
+      3: { title: 'Full Body B', short: 'Full B', warmup: LOWER_WARM, ex: [
+        W('rdl', 'Romanian Deadlift', 3, '6–8', 150, { major: true }), W('db-shoulder', 'DB Shoulder Press', 3, '8–10', 90, { major: true }),
+        BW('pullup', 'Pull-ups', 3, '6–10', 90), W('walk-lunge-db', 'DB Walking Lunges', 2, '10/leg', 90), BW('dead-bug', 'Dead Bugs', 2, '10/side', 45)] },
+      5: { title: 'Full Body C', short: 'Full C', warmup: LOWER_WARM, ex: [
+        W('leg-press', 'Leg Press', 3, '10–12', 120, { major: true }), W('incline-db', 'Incline DB Press', 3, '8–12', 120, { major: true }),
+        W('sa-db-row', 'Single-Arm DB Row', 3, '10–12/side', 60), W('curl', 'DB Curls', 2, '10–12', 60), W('rope-pushdown', 'Triceps Pushdown', 2, '10–12', 60)] },
+    },
+  },
+  { id: 'blank', name: 'Start from scratch', days: 'Build your own', blurb: 'No workouts yet. Add your own after setup.', program: {} },
+];

@@ -1,4 +1,4 @@
-import { PROGRAM, DAYS, REST_NOTE, ORDER, LOCATIONS, HOME, TRAVEL } from './program.js';
+import { PROGRAM, DAYS, REST_NOTE, LOCATIONS, HOME, TRAVEL, TEMPLATES } from './program.js';
 const DEFAULTS = { ...PROGRAM, ...HOME, ...TRAVEL };
 
 // ---------- storage ----------
@@ -112,13 +112,24 @@ const I = {
 // ---------- program ----------
 // The program lives in program.js; edits made in the app are stored in S.program.
 // Home workouts are merged in so an older saved program still gets them.
-const prog = () => (S.program ? { ...DEFAULTS, ...S.program } : DEFAULTS);
+// Someone who set up their own program (S.settings.own) sees only S.program;
+// otherwise the built-in program with edits on top. A null entry is a deleted workout.
+function prog() {
+  const all = S.settings.own ? { ...(S.program || {}) } : S.program ? { ...DEFAULTS, ...S.program } : { ...DEFAULTS };
+  for (const k in all) if (!all[k]) delete all[k];
+  return all;
+}
+// Main-location workouts in cycle order: days of the week Monday-first, then any with no set day.
+const dayRank = d => (d < 7 ? (d + 6) % 7 : d);
+const order = () => Object.keys(prog()).map(Number).filter(d => !prog()[d].loc).sort((a, b) => dayRank(a) - dayRank(b));
+const weekTarget = () => Math.max(1, order().filter(d => d < 7).length || order().length);
+const newKey = () => Math.max(99, ...Object.keys({ ...DEFAULTS, ...(S.program || {}) }).map(Number)) + 1;
 // The gym workout a workout stands in for (Push · Home → Push).
 const baseDay = d => prog()[d]?.of ?? d;
 // Locations: School (the main program), Home, Travel, plus any added in the app (S.locs).
-const locs = () => [...LOCATIONS, ...(S.locs || [])];
+const locs = () => (S.settings.own ? (S.locs?.length ? S.locs : [{ id: 'school', name: 'Gym' }]) : [...LOCATIONS, ...(S.locs || [])]);
 const curLoc = () => locs().find(l => l.id === S.settings.where) || locs()[0];
-const locDays = id => (id === 'school' ? ORDER.filter(d => prog()[d])
+const locDays = id => (id === 'school' ? order()
   : Object.keys(prog()).map(Number).filter(d => prog()[d].loc === id).sort((a, b) => a - b));
 // The version of a School workout to do where you are now (Push → Push · Home).
 const here = d => {
@@ -129,7 +140,7 @@ const allDays = () => locs().flatMap(l => locDays(l.id));
 const normWarm = x => (typeof x === 'string' ? { n: x } : x);
 const isRunDay = d => !!prog()[d]?.ex.length && prog()[d].ex.every(e => e.t === 'run');
 // Non-run workouts in order form the cycle.
-const rotation = () => ORDER.filter(d => prog()[d] && !isRunDay(d));
+const rotation = () => order().filter(d => !isRunDay(d));
 function nextUp() {
   const rot = rotation();
   const last = [...S.sessions].reverse().find(s => rot.includes(baseDay(s.day)));
@@ -301,6 +312,7 @@ function render() {
   else if (ui.screen === 'detail') html = vDetail();
   else if (ui.screen === 'summary') html = vSummary();
   else if (ui.screen === 'prog') html = vProgram();
+  else if (ui.screen === 'onboard') html = vOnboard();
   else html = (ui.tab === 'home' ? vHome() : ui.tab === 'progress' ? vProgress() : vHistory()) + vTabs();
   $app.innerHTML = html;
   if (ui.screen === 'detail') bindChart();
@@ -431,7 +443,7 @@ function vHome() {
       <p class="muted">${a.ex.filter(hasData).length} of ${a.ex.length} exercises logged</p>
       <button class="btn primary xl" data-act="resume">Resume Workout</button>
       <p class="eyebrow switch-lbl">Switch workout</p>
-      <div class="chips">${ORDER.filter(d => prog()[d]).map(here).filter(d => d !== a.day).map(d =>
+      <div class="chips">${order().map(here).filter(d => d !== a.day).map(d =>
         `<button class="chip" data-act="start" data-day="${d}">${esc(prog()[d].short)}</button>`).join('')}</div>`;
   } else if (todayDone) {
     const nx = next != null && prog()[next];
@@ -459,12 +471,12 @@ function vHome() {
       <p class="muted">${REST_NOTE}</p>
       ${nx ? `<p class="muted small">Next in your cycle: ${esc(nx.title)}</p>` : ''}`;
   }
-  const chips = ORDER.filter(d => prog()[d]).map(here).filter(d => d !== heroDay || isRunDay(d)).map(d =>
+  const chips = order().map(here).filter(d => d !== heroDay || isRunDay(d)).map(d =>
     `<button class="chip" data-act="start" data-day="${d}">${esc(prog()[d].short)}</button>`).join('');
   const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const tip = !standalone && !localStorage.getItem('wt-tip') && /iPhone|iPad/.test(navigator.userAgent)
     ? `<div class="tip"><span>Tip: tap Share → <b>Add to Home Screen</b> so it opens like an app and your history stays put.</span><button data-act="tip-x">✕</button></div>` : '';
-  return `${topbar(`<span class="date">${now.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>`)}
+  return `${topbar(`${S.settings.name ? `<span class="hey">Hey ${esc(S.settings.name)}</span>` : ''}<span class="date">${now.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}</span>`)}
     <main class="page">
       ${weekStrip()}
       ${a || sel ? '' : `<button class="loc-pill" data-act="loc">${I.pin}<span>${esc(curLoc().name)}</span>${I.down}</button>`}
@@ -669,7 +681,7 @@ function vSummary() {
   const stats = w.ex.some(e => e.t === 'run' && hasData(e))
     ? tile(fmtRun(w.ex.find(e => e.t === 'run')).split(' · ')[0], 'Distance') + minTile
     : minTile + tile(sets, 'Sets') + (vol ? tile(Math.round(vol).toLocaleString(), `${unit()} volume`) : '');
-  const neon = isNeon(), wk = Math.min(5, weekCount());
+  const neon = isNeon(), tgt = weekTarget(), wk = Math.min(tgt, weekCount());
   const head = neon
     ? `<div class="nc-burst" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
        <div class="nc-stamp"><h1>Workout<br>complete</h1></div>
@@ -682,9 +694,9 @@ function vSummary() {
     : `<section class="card"><p class="eyebrow gold">Personal records</p>${prs.map(([a, b]) =>
       `<div class="row"><span>${esc(a)}</span><b class="pr">${esc(b)}</b></div>`).join('')}</section>`;
   const weekBlock = neon && w.date === dk(new Date())
-    ? `<section class="card nc-week"><div class="row"><span class="eyebrow">This week</span><b>${wk} / 5</b></div>
-       <div class="nc-bars">${Array.from({ length: 5 }, (_, i) => `<i class="${i < wk ? (i === wk - 1 ? 'new' : 'on') : ''}"></i>`).join('')}</div>
-       <p class="muted small">${wk >= 5 ? 'Week fully lit.' : wk === 4 ? 'One more and the week is fully lit.' : `${5 - wk} more to light up the week.`}</p></section>` : '';
+    ? `<section class="card nc-week"><div class="row"><span class="eyebrow">This week</span><b>${wk} / ${tgt}</b></div>
+       <div class="nc-bars" style="grid-template-columns:repeat(${tgt},minmax(0,1fr))">${Array.from({ length: tgt }, (_, i) => `<i class="${i < wk ? (i === wk - 1 ? 'new' : 'on') : ''}"></i>`).join('')}</div>
+       <p class="muted small">${wk >= tgt ? 'Week fully lit.' : wk === tgt - 1 ? 'One more and the week is fully lit.' : `${tgt - wk} more to light up the week.`}</p></section>` : '';
   return `<main class="page summary ${neon ? 'nc' : ''}">
     ${head}
     <div class="tiles">${stats}</div>
@@ -985,6 +997,137 @@ function removeLocation(id) {
   save(); openLocations(); render();
 }
 
+// ---------- making and removing workouts ----------
+function addProgram(locId) {
+  closeSheet();
+  const blank = (title, extra = {}) => ({ title, short: title.split(/\s+/)[0], warmup: [], ex: [], ...extra });
+  const open = (d, def) => {
+    ui.pd = d; ui.draft = def; ui.progBack = null; ui.progOrig = JSON.stringify(def); ui.progNew = true;
+    ui.screen = 'prog'; render(); scrollTo(0, 0);
+    setTimeout(() => $app.querySelector('[data-pf=title]')?.select(), 50);
+  };
+  if (locId === 'school') {
+    const taken = new Set(order().filter(d => d < 7));
+    const days = [1, 2, 3, 4, 5, 6, 0].filter(d => !taken.has(d));
+    setTimeout(() => openSheet('Which day is it on?', [
+      ...days.map(d => ({ label: DAYS[d], fn: () => open(d, blank('New workout')) })),
+      { label: 'No set day (just in the cycle)', fn: () => open(newKey(), blank('New workout')) },
+    ]), 260);
+  } else {
+    const loc = locs().find(l => l.id === locId);
+    const have = new Set(locDays(locId).map(d => prog()[d].of));
+    const opts = rotation().filter(d => !have.has(d));
+    if (!opts.length) { toast(`Every workout already has a ${loc.name} version`); return; }
+    setTimeout(() => openSheet(`At ${loc.name}, this replaces…`, opts.map(d => ({
+      label: prog()[d].title,
+      fn: () => open(newKey(), blank(`${prog()[d].short} · ${loc.name}`, { short: prog()[d].short, of: d, loc: locId })),
+    }))), 260);
+  }
+}
+function deleteProgram() {
+  const d = ui.pd, p = prog()[d];
+  const kids = p.loc ? [] : Object.keys(prog()).map(Number).filter(k => prog()[k].of === d);
+  if (!confirm(`Delete ${p.title}?${kids.length ? ` Its ${kids.length} location version${kids.length > 1 ? 's go' : ' goes'} too.` : ''} Workouts you've logged stay in History.`)) return;
+  S.program ||= clone(DEFAULTS);
+  for (const k of [d, ...kids]) { if (S.settings.own) delete S.program[k]; else S.program[k] = null; }
+  if (S.active?.day === d) S.active = null;
+  save(); leaveProgram(); toast('Deleted');
+}
+
+// ---------- first-time setup ----------
+function needsOnboard() {
+  if (S.settings.onboarded) return false;
+  if (S.sessions.length || S.program || S.active) { S.settings.onboarded = true; save(); return false; }
+  return true;
+}
+function openOnboard(step = 0) {
+  ui.ob = { step, tpl: ui.ob?.tpl || 'shanin', locs: [], extra: [], base: 'Gym' };
+  ui.screen = 'onboard'; closeSheet(); render(); scrollTo(0, 0);
+}
+function obNext() {
+  const ob = ui.ob;
+  if (ob.step === 0) {
+    S.settings.name = ($app.querySelector('[data-ob=name]')?.value || '').trim();
+    const bw = ($app.querySelector('[data-ob=bw]')?.value || '').trim();
+    if (bw) S.settings.bw = bw;
+    save();
+  }
+  if (ob.step === 2) {
+    ob.base = ($app.querySelector('[data-ob=base]')?.value || '').trim() || 'Gym';
+    return applyTemplate();
+  }
+  ob.step++; render(); scrollTo(0, 0);
+}
+function applyTemplate() {
+  const ob = ui.ob, t = TEMPLATES.find(x => x.id === ob.tpl);
+  S.program = clone(t.program);
+  S.settings.own = true; // from here prog() is only this program
+  S.locs = [{ id: 'school', name: ob.base }];
+  for (const name of ob.locs) {
+    const pre = t.locs?.find(l => l.name === name);
+    const id = 'loc-' + uid();
+    if (pre) {
+      for (const def of Object.values(pre.days)) S.program[newKey()] = { ...clone(def), loc: id, title: def.title.replace(/· .*$/, `· ${name}`) };
+    } else {
+      for (const d of order()) {
+        if (isRunDay(d)) continue;
+        const p = clone(prog()[d]);
+        S.program[newKey()] = { ...p, title: `${p.short} · ${name}`, of: d, loc: id };
+      }
+    }
+    S.locs.push({ id, name, custom: true });
+  }
+  Object.assign(S.settings, { own: true, onboarded: true, where: 'school', theme: S.settings.theme === 'auto' ? 'neon' : S.settings.theme, template: t.id });
+  save(); applyTheme();
+  ui.ob = null; ui.screen = null; ui.tab = 'home'; render(); scrollTo(0, 0);
+  toast(order().length ? `You're set${S.settings.name ? `, ${S.settings.name}` : ''}` : 'Add your first workout in Settings');
+  if (!order().length) setTimeout(openSettings, 400);
+}
+function vOnboard() {
+  const ob = ui.ob, st = S.settings;
+  const dots = `<div class="ob-dots">${[0, 1, 2].map(i => `<i class="${i === ob.step ? 'on' : i < ob.step ? 'done' : ''}"></i>`).join('')}</div>`;
+  let body = '';
+  if (ob.step === 0) body = `
+    <p class="ob-kick">Welcome</p>
+    <h1 class="big">Let's set up your workouts</h1>
+    <p class="muted">Takes about a minute. You can change everything later in Settings.</p>
+    <label class="ob-field"><span>Your name</span><input class="text-in" data-ob="name" value="${esc(st.name || '')}" placeholder="First name" autocomplete="given-name"></label>
+    <div class="ob-field"><span>Units</span><div class="seg">${['lb', 'kg'].map(u => `<button class="${st.unit === u ? 'on' : ''}" data-act="ob-unit" data-v="${u}">${u}</button>`).join('')}</div></div>
+    <label class="ob-field"><span>Body weight · optional</span><input class="text-in" data-ob="bw" inputmode="decimal" value="${esc(st.bw || '')}" placeholder="${st.unit === 'kg' ? 'e.g. 80' : 'e.g. 175'}"></label>
+    <p class="muted small">Body weight is used for pull-ups, dips and other bodyweight lifts.</p>`;
+  if (ob.step === 1) body = `
+    <p class="ob-kick">Step 2 of 3</p>
+    <h1 class="big">Pick a starting program</h1>
+    <p class="muted">Every workout is editable. Swap exercises, change sets, add your own.</p>
+    <div class="ob-tpls">${TEMPLATES.map(t => `<button class="ob-tpl ${ob.tpl === t.id ? 'on' : ''}" data-act="ob-tpl" data-v="${t.id}">
+      <span class="ob-tpl-top"><b>${esc(t.name)}</b>${ob.tpl === t.id ? I.check : ''}</span>
+      <small class="ob-days">${esc(t.days)}</small><span class="ob-blurb">${esc(t.blurb)}</span></button>`).join('')}</div>`;
+  if (ob.step === 2) {
+    const t = TEMPLATES.find(x => x.id === ob.tpl);
+    const opts = [...new Set(['Home', 'Travel', ...ob.extra])];
+    body = `
+    <p class="ob-kick">Step 3 of 3</p>
+    <h1 class="big">Where do you work out?</h1>
+    <p class="muted">Each place gets its own version of your workouts, so home can use dumbbells while the gym uses machines. Switch places from the pin on Today.</p>
+    <label class="ob-field"><span>Main place</span><input class="text-in" data-ob="base" value="${esc(ob.base)}" placeholder="Gym"></label>
+    <div class="ob-field"><span>Other places · optional</span><div class="chips">${opts.map(o =>
+      `<button class="chip ${ob.locs.includes(o) ? 'on' : ''}" data-act="ob-loc" data-v="${esc(o)}">${ob.locs.includes(o) ? I.check : I.plus}${esc(o)}</button>`).join('')}</div></div>
+    <div class="ob-add"><input class="text-in" data-ob="newloc" placeholder="Another place, e.g. Hotel"><button class="btn ghost" data-act="ob-locadd">Add</button></div>
+    <p class="muted small">${t.locs?.length ? 'Home and Travel come ready-made with this program. ' : ''}Other places start as a copy of your main workouts. Edit them in Settings → Workouts.</p>`;
+  }
+  return `<main class="page onboard">${dots}${body}</main>
+    <footer class="bar ob-bar">${ob.step ? '<button class="btn ghost" data-act="ob-back">Back</button>' : ''}
+      <button class="btn primary xl" data-act="ob-next">${ob.step === 2 ? "Let's go" : 'Next'}</button></footer>`;
+}
+async function shareApp() {
+  const url = location.origin + location.pathname.replace(/index\.html$/, '');
+  const text = `Here's my workout app. Open it in Safari, tap Share, then Add to Home Screen. It walks you through setup.`;
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Workout app', text, url }); return; }
+  } catch (e) { if (e?.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast('Link copied'); } catch { prompt('Copy this link', url); }
+}
+
 function openSettings() {
   const st = S.settings;
   const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button class="${st[key] === v ? 'on' : ''}" data-act="set" data-k="${key}" data-v="${v}">${l}</button>`).join('')}</div>`;
@@ -993,13 +1136,20 @@ function openSettings() {
     <p class="eyebrow center">Settings</p>
     <p class="lbl">Appearance</p>${seg('theme', [['auto', 'Auto'], ['light', 'Light'], ['dark', 'Dark'], ['neon', 'Neon']])}
     ${isNeon() ? `<p class="lbl">Opening screen · phone home screen when the app opens</p>${seg('splash', [[true, 'On'], [false, 'Off']])}` : ''}
+    <p class="lbl">Your name</p>
+    <input class="text-in" data-sf="name" placeholder="Name" value="${esc(st.name || '')}" autocomplete="given-name">
     <p class="lbl">Units</p>${seg('unit', [['lb', 'lb'], ['kg', 'kg']])}
     <p class="lbl">Body weight · ${unit()}</p>
     <input class="text-in" data-sf="bw" inputmode="decimal" placeholder="e.g. 180" value="${esc(st.bw)}">
     <p class="lbl">Rest timer after each set</p>${seg('rest', [[true, 'On'], [false, 'Off']])}
     <p class="lbl">Workouts · change exercises, sets and warm-ups</p>
     ${locs().map(l => `<div class="set-loc"><span>${esc(l.name)}</span><div class="chips">${locDays(l.id).map(d =>
-      `<button class="chip" data-act="edit-prog" data-d="${d}">${esc(prog()[d].short)}</button>`).join('')}</div></div>`).join('')}
+      `<button class="chip" data-act="edit-prog" data-d="${d}">${esc(prog()[d].short)}</button>`).join('')}<button class="chip add" data-act="prog-add" data-loc="${esc(l.id)}" aria-label="Add a workout to ${esc(l.name)}">${I.plus}</button></div></div>`).join('')}
+    <button class="btn link" data-act="loc-add">${I.plus} Add a location</button>
+    <button class="btn ghost" data-act="starter">Switch to a starter program</button>
+    <p class="lbl">Share</p>
+    <button class="btn ghost share" data-act="share-app">Send this app to a friend</button>
+    <p class="muted small">They get their own copy with a quick setup. Nothing of yours is shared.</p>
     <p class="lbl">Backup · ${S.sessions.length} workouts saved on this device</p>
     <div class="row2"><button class="btn ghost" data-act="export">Export</button><button class="btn ghost" data-act="import">Import</button></div>
     <button class="sheet-btn cancel" data-act="sheet-x">Close</button></div>`;
@@ -1008,6 +1158,7 @@ function openSettings() {
 $sheet.addEventListener('input', e => {
   const f = e.target.dataset.sf, v = e.target.value.trim();
   if (f === 'bw') { S.settings.bw = v; saveSoon(); }
+  if (f === 'name') { S.settings.name = v; saveSoon(); }
 });
 
 // ----- program editor -----
@@ -1063,13 +1214,13 @@ function vProgram() {
     <footer class="bar"><button class="btn primary xl" data-act="pe-save">Save</button></footer>`;
 }
 function leaveProgram() {
-  ui.draft = null;
+  ui.draft = null; ui.progNew = false;
   ui.screen = ui.progBack === 'workout' && S.active ? 'workout' : null;
   render(); scrollTo(0, 0);
 }
 function saveProgram() {
   const p = ui.draft, d = ui.pd;
-  p.title = p.title.trim() || prog()[d].title;
+  p.title = p.title.trim() || prog()[d]?.title || 'Workout';
   p.short = (p.short || '').trim() || p.title.split(/\s+/)[0];
   p.warmup = p.warmup.filter(x => x.n.trim()).map(x => ({ n: x.n.trim(), ...(x.reps ? { reps: x.reps.trim() } : {}), ...(x.sec ? { sec: x.sec } : {}) }));
   p.ex = p.ex.filter(e => e.n.trim());
@@ -1518,7 +1669,7 @@ function showSplash() {
   if (document.getElementById('splash')) return;
   const el = document.createElement('div');
   el.id = 'splash';
-  const wk = Math.min(5, weekCount()), today = dk(new Date());
+  const tgt = weekTarget(), wk = Math.min(tgt, weekCount()), today = dk(new Date());
   const pending = !S.active && !S.sessions.some(x => x.date === today);
   const stars = [[46, 56], [300, 42], [338, 120], [26, 170], [250, 200], [96, 28], [190, 90]].map(([x, y], i) =>
     `<i class="sp-star" style="left:${(x / 3.9).toFixed(1)}%;top:${y}px;animation-delay:${i * .6}s"></i>`).join('');
@@ -1534,7 +1685,7 @@ function showSplash() {
     ${PALM_A}${PALM_B}
     <div class="sp-clock"><p class="sp-date"></p><p class="sp-time"></p><p class="sp-name">Gains Coast</p></div>
     <div class="sp-dock">
-      <div class="sp-week"><span>This week</span><span class="sp-bars">${Array.from({ length: 5 }, (_, i) => `<i class="${i < wk ? 'on' : ''}"></i>`).join('')}</span><b>${wk} / 5</b></div>
+      <div class="sp-week"><span>This week</span><span class="sp-bars">${Array.from({ length: tgt }, (_, i) => `<i class="${i < wk ? 'on' : ''}"></i>`).join('')}</span><b>${wk} / ${tgt}</b></div>
       <div class="sp-apps">
         ${app('w', '<svg viewBox="0 0 24 24"><path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/></svg>', 'Workout', 'home')}
         ${app('p', '<svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>', 'Progress', 'progress')}
@@ -1610,11 +1761,29 @@ const actions = {
     leaveProgram();
   },
   'pe-save': saveProgram,
-  'pe-more': () => openSheet(ui.draft.title, [{ label: 'Reset to the original workout', danger: true, fn: () => {
-    if (!DEFAULTS[ui.pd]) return;
-    const p = clone(DEFAULTS[ui.pd]); p.warmup = (p.warmup || []).map(normWarm);
-    ui.draft = p; render(); toast('Reset · tap Save to keep it');
-  } }]),
+  'pe-more': () => {
+    const items = [];
+    if (!S.settings.own && DEFAULTS[ui.pd] && !ui.progNew) items.push({ label: 'Reset to the original workout', fn: () => {
+      const p = clone(DEFAULTS[ui.pd]); p.warmup = (p.warmup || []).map(normWarm);
+      ui.draft = p; render(); toast('Reset · tap Save to keep it');
+    } });
+    if (!ui.progNew) items.push({ label: 'Delete this workout', danger: true, fn: deleteProgram });
+    if (items.length) openSheet(ui.draft.title, items);
+  },
+  'prog-add': b => addProgram(b.dataset.loc),
+  starter: () => { if (confirm('Pick a new starter program? It replaces your workouts and locations. Your history stays.')) openOnboard(1); },
+  'share-app': shareApp,
+  'ob-next': () => obNext(),
+  'ob-back': () => { ui.ob.step = Math.max(0, ui.ob.step - 1); render(); scrollTo(0, 0); },
+  'ob-tpl': b => { ui.ob.tpl = b.dataset.v; render(); },
+  'ob-unit': b => { S.settings.unit = b.dataset.v; save(); render(); },
+  'ob-loc': b => { const L = ui.ob.locs, v = b.dataset.v; L.includes(v) ? L.splice(L.indexOf(v), 1) : L.push(v); render(); },
+  'ob-locadd': () => {
+    const inp = $app.querySelector('[data-ob=newloc]'), v = (inp?.value || '').trim();
+    if (!v) { inp?.focus(); return; }
+    if (!ui.ob.extra.includes(v)) ui.ob.extra.push(v), ui.ob.locs.push(v);
+    render();
+  },
   'pe-wadd': () => { ui.draft.warmup.push({ n: '' }); render(); $app.querySelector(`[data-pf=wn][data-j="${ui.draft.warmup.length - 1}"]`)?.focus(); },
   'pe-wdel': b => { ui.draft.warmup.splice(+b.dataset.j, 1); render(); },
   'pe-eadd': () => {
@@ -1853,8 +2022,10 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => re
 
 // ---------- boot ----------
 applyTheme();
-if (isNeon() && S.settings.splash !== false) showSplash();
-if (S.active) ui.screen = 'workout';
+const firstRun = needsOnboard();
+if (!firstRun && isNeon() && S.settings.splash !== false) showSplash();
+if (firstRun) { S.settings.theme = 'neon'; applyTheme(); openOnboard(0); }
+else if (S.active) ui.screen = 'workout';
 render();
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   // pick up new versions on the next open instead of the one after
