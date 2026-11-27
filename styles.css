@@ -714,3 +714,46 @@ html:has(#sheet.open), html:has(#sheet.open) body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .tm-ring, .rt-ring, .tm-ripple { animation: none !important; } }
 .rt-mode { margin: 0; }
 .switch-lbl { margin-top: 26px; }
+
+/* ---------- first-time setup ---------- */
+.onboard { padding-top: calc(28px + var(--safe-t)); padding-bottom: 140px; }
+.ob-dots { display: flex; gap: 6px; margin-bottom: 26px; }
+.ob-dots i { width: 28px; height: 5px; border-radius: 3px; background: var(--line); }
+.ob-dots i.on { background: var(--accent); width: 44px; }
+.ob-dots i.done { background: var(--accent); opacity: .5; }
+.ob-kick { margin: 0 0 6px; font-size: 13px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); }
+.onboard .big { margin: 0 0 10px; }
+.onboard > .muted { margin: 0 0 22px; font-size: 16px; line-height: 1.45; }
+.ob-field { display: flex; flex-direction: column; gap: 8px; margin: 0 0 18px; }
+.ob-field > span { font-size: 14px; font-weight: 700; color: var(--muted); }
+.ob-field .seg { margin: 0; }
+.ob-tpls { display: flex; flex-direction: column; gap: 10px; }
+.ob-tpl { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: 16px; background: var(--surface); border: 2px solid transparent; text-align: left; box-shadow: var(--shadow); }
+.ob-tpl.on { border-color: var(--accent); }
+.ob-tpl-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ob-tpl-top b { font-size: 18px; }
+.ob-tpl-top svg { width: 22px; height: 22px; flex: none; color: var(--accent); stroke-width: 2.6; }
+.ob-days { font-size: 13px; font-weight: 700; color: var(--accent); }
+.ob-blurb { font-size: 14px; color: var(--muted); line-height: 1.4; }
+.ob-field .chips .chip { display: inline-flex; align-items: center; gap: 6px; }
+.ob-field .chip svg { width: 16px; height: 16px; stroke-width: 2.6; }
+.ob-field .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.ob-add { display: flex; gap: 8px; margin: -6px 0 14px; }
+.ob-add .text-in { flex: 1; }
+.ob-add .btn { flex: none; width: auto; padding: 0 18px; margin: 0; }
+.ob-bar { display: flex; gap: 10px; }
+.ob-bar .btn.ghost { flex: none; width: auto; min-width: 96px; margin: 0; }
+.ob-bar .btn.primary { flex: 1; margin: 0; }
+.h-title .hey { display: block; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 2px; }
+.chip.add { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; padding: 0 12px; border-style: dashed; color: var(--muted); }
+.chip.add svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.btn.share { margin-top: 0; }
+[data-theme="neon"] .ob-tpl { border: 2px solid var(--line); }
+[data-theme="neon"] .ob-tpl.on { border-color: var(--accent); box-shadow: 0 0 18px rgba(46,230,214,.25); }
+.pe-days { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.pe-days > span { font-size: 13px; font-weight: 600; color: var(--muted); }
+.pe-days .chips { gap: 6px; }
+.pe-days .chip { min-height: 40px; padding: 0 12px; }
+.pe-days .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pe-days .chip:disabled { opacity: .3; }
+.loc-row .icon.sm svg { width: 18px; height: 18px; }
