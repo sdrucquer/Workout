@@ -435,7 +435,13 @@ function vHome() {
   const gymShow = prog()[day] ? (isRunDay(day) ? day : gymNext ?? day) : null;
   const show = gymShow == null ? null : here(gymShow);
   let hero, heroDay = null;
-  if (sel) hero = vDayHero(sel);
+  if (!order().length && !a && !sel) hero = `
+      <p class="eyebrow">Getting started</p>
+      <h2 class="big">Add your first workout</h2>
+      <p class="muted">Name it, pick its day, then add a warm-up and exercises. You can add as many as you like.</p>
+      <button class="btn primary xl" data-act="prog-add" data-loc="school">${I.plus} Add a workout</button>
+      <button class="btn link" data-act="starter">Or pick a starter program</button>`;
+  else if (sel) hero = vDayHero(sel);
   else if (a) {
     hero = `
       <p class="eyebrow">In progress · ${fmtDur((Date.now() - a.start) / 1000)}</p>
@@ -978,7 +984,7 @@ function addLocation() {
   for (const d of locDays(from.id)) {
     if (isRunDay(d)) continue;
     const of = baseDay(d);
-    if (of === 2) continue; // Speed + Core is shared
+    if (!S.settings.own && of === 2) continue; // the built-in Speed + Core day is shared
     const p = clone(prog()[d]);
     Object.assign(p, { title: `${p.short} · ${name}`, of, loc: id });
     S.program[base + of] = p;
@@ -1000,7 +1006,7 @@ function removeLocation(id) {
 // ---------- making and removing workouts ----------
 function addProgram(locId) {
   closeSheet();
-  const blank = (title, extra = {}) => ({ title, short: title.split(/\s+/)[0], warmup: [], ex: [], ...extra });
+  const blank = (title, extra = {}) => ({ title, short: '', warmup: [], ex: [], ...extra });
   const open = (d, def) => {
     ui.pd = d; ui.draft = def; ui.progBack = null; ui.progOrig = JSON.stringify(def); ui.progNew = true;
     ui.screen = 'prog'; render(); scrollTo(0, 0);
@@ -1027,7 +1033,7 @@ function addProgram(locId) {
 function deleteProgram() {
   const d = ui.pd, p = prog()[d];
   const kids = p.loc ? [] : Object.keys(prog()).map(Number).filter(k => prog()[k].of === d);
-  if (!confirm(`Delete ${p.title}?${kids.length ? ` Its ${kids.length} location version${kids.length > 1 ? 's go' : ' goes'} too.` : ''} Workouts you've logged stay in History.`)) return;
+  if (!confirm(`Delete ${p.title}?${S.active?.day === d ? ' You’re doing it right now; this discards it.' : ''}${kids.length ? ` Its ${kids.length} location version${kids.length > 1 ? 's go' : ' goes'} too.` : ''} Workouts you've logged stay in History.`)) return;
   S.program ||= clone(DEFAULTS);
   for (const k of [d, ...kids]) { if (S.settings.own) delete S.program[k]; else S.program[k] = null; }
   if (S.active?.day === d) S.active = null;
@@ -1053,7 +1059,7 @@ function obNext() {
     save();
   }
   if (ob.step === 2) {
-    ob.base = ($app.querySelector('[data-ob=base]')?.value || '').trim() || 'Gym';
+    ob.base = (ob.base || '').trim() || 'Gym';
     return applyTemplate();
   }
   ob.step++; render(); scrollTo(0, 0);
@@ -1112,7 +1118,7 @@ function vOnboard() {
     <label class="ob-field"><span>Main place</span><input class="text-in" data-ob="base" value="${esc(ob.base)}" placeholder="Gym"></label>
     <div class="ob-field"><span>Other places · optional</span><div class="chips">${opts.map(o =>
       `<button class="chip ${ob.locs.includes(o) ? 'on' : ''}" data-act="ob-loc" data-v="${esc(o)}">${ob.locs.includes(o) ? I.check : I.plus}${esc(o)}</button>`).join('')}</div></div>
-    <div class="ob-add"><input class="text-in" data-ob="newloc" placeholder="Another place, e.g. Hotel"><button class="btn ghost" data-act="ob-locadd">Add</button></div>
+    <div class="ob-add"><input class="text-in" data-ob="newloc" value="${esc(ob.newloc || '')}" placeholder="Another place, e.g. Hotel" enterkeyhint="done"><button class="btn ghost" data-act="ob-locadd">Add</button></div>
     <p class="muted small">${t.locs?.length ? 'Home and Travel come ready-made with this program. ' : ''}Other places start as a copy of your main workouts. Edit them in Settings → Workouts.</p>`;
   }
   return `<main class="page onboard">${dots}${body}</main>
@@ -1771,7 +1777,7 @@ const actions = {
     if (items.length) openSheet(ui.draft.title, items);
   },
   'prog-add': b => addProgram(b.dataset.loc),
-  starter: () => { if (confirm('Pick a new starter program? It replaces your workouts and locations. Your history stays.')) openOnboard(1); },
+  starter: () => { if (S.active) { toast('Finish or discard your current workout first'); return; } if (confirm('Pick a new starter program? It replaces your workouts and locations. Your history stays.')) openOnboard(1); },
   'share-app': shareApp,
   'ob-next': () => obNext(),
   'ob-back': () => { ui.ob.step = Math.max(0, ui.ob.step - 1); render(); scrollTo(0, 0); },
@@ -1782,7 +1788,7 @@ const actions = {
     const inp = $app.querySelector('[data-ob=newloc]'), v = (inp?.value || '').trim();
     if (!v) { inp?.focus(); return; }
     if (!ui.ob.extra.includes(v)) ui.ob.extra.push(v), ui.ob.locs.push(v);
-    render();
+    ui.ob.newloc = ''; render();
   },
   'pe-wadd': () => { ui.draft.warmup.push({ n: '' }); render(); $app.querySelector(`[data-pf=wn][data-j="${ui.draft.warmup.length - 1}"]`)?.focus(); },
   'pe-wdel': b => { ui.draft.warmup.splice(+b.dataset.j, 1); render(); },
@@ -2015,7 +2021,17 @@ $app.addEventListener('input', e => {
   if (!ui.edit) saveSoon();
 });
 $app.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.dataset.ob === 'newloc') { e.preventDefault(); actions['ob-locadd'](); return; }
   if (e.key === 'Enter' && e.target.matches('input')) e.target.blur();
+});
+// Setup: keep what's typed when a tap re-draws the step.
+$app.addEventListener('input', e => {
+  const f = e.target.dataset.ob; if (!f || !ui.ob) return;
+  const v = e.target.value;
+  if (f === 'name') S.settings.name = v.trim();
+  if (f === 'bw') S.settings.bw = v.trim();
+  if (f === 'base') ui.ob.base = v;
+  if (f === 'newloc') ui.ob.newloc = v;
 });
 addEventListener('resize', () => { if (ui.screen === 'detail') bindChart(); });
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => render());
