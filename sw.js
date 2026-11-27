@@ -1,7 +1,7 @@
 // Offline cache. Tries the network first so updates show up right away, and
 // falls back to the cached copy when offline or the gym signal is bad.
-const VERSION = 'wt-v17';
-const FILES = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/program.js', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-180.png'];
+const VERSION = 'wt-v18';
+const FILES = ['./', 'index.html', 'styles.css', 'js/app.js', 'js/program.js', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES.map(f => new Request(f, { cache: 'reload' })))).then(() => self.skipWaiting()));
