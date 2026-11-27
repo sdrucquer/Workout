@@ -844,3 +844,16 @@ html:has(#sheet.open), html:has(#sheet.open) body { overflow: hidden; }
 .dm-list .dm-row { color: #f2f2f2; justify-content: flex-start; gap: 8px; border-bottom: 1px solid #4b4650; border-radius: 0; }
 .dm-list .dm-row:last-child { border-bottom: 0; }
 .dm-addbar b { font-size: 9px; white-space: nowrap; }
+.in-card { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; padding: 14px; border-radius: 16px; background: var(--surface); border: 1.5px solid var(--accent); }
+.in-card b { font-size: 16px; }
+.in-card span { font-size: 14px; color: var(--muted); }
+.in-safari { margin-top: 10px; }
+.in-safari .btn { margin: 0; }
+.in-help-btn { display: block; margin: 4px 0 0; }
+.in-help { margin: 8px 0; padding: 14px; border-radius: 16px; background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+.in-help p { margin: 0; display: flex; flex-direction: column; gap: 2px; }
+.in-help b { font-size: 15px; }
+.in-help span { font-size: 14px; color: var(--muted); line-height: 1.4; }
+[data-theme="neon"] .in-help { border: 1px solid var(--line); }
+.in-safari .btn { white-space: nowrap; font-size: 15px; letter-spacing: .02em; padding: 0 10px; min-height: 50px; }
+.in-safari + .muted { margin-top: 14px; }

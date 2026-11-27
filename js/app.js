@@ -1080,22 +1080,45 @@ const UA = navigator.userAgent;
 const isIOS = /iPhone|iPad|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/.test(UA);
 const iosOtherBrowser = isIOS && /CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(UA);
+// Browsers built into other apps can't add to the Home Screen; send people to Safari.
+const inAppBrowser = /Instagram|FBAN|FBAV|FB_IAB|Snapchat|musical_ly|TikTok|BytedanceWebview|LinkedInApp|Twitter|Discord|\bLine\//i.test(UA);
+const appUrl = () => location.origin + location.pathname.replace(/index\.html$/, '');
+async function copyLink() {
+  try { await navigator.clipboard.writeText(appUrl()); toast('Link copied · paste it into Safari'); }
+  catch { prompt('Copy this link, then paste it into Safari', appUrl()); }
+}
+// x-safari-https:// opens Safari from other apps on recent iPhones; if nothing happens, copy the link instead.
+function openInSafari() {
+  let left = false;
+  const off = () => { if (document.visibilityState === 'hidden') left = true; };
+  document.addEventListener('visibilitychange', off);
+  location.href = 'x-safari-' + appUrl();
+  setTimeout(() => { document.removeEventListener('visibilitychange', off); if (!left) copyLink(); }, 1500);
+}
 let installEvt = null;
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (ui.screen === 'install') render(); });
 addEventListener('appinstalled', () => { if (ui.screen === 'install') { ui.installed = true; render(); } });
 // Which steps to show: iOS 26+ Safari hides Share behind the ••• button; older iOS shows it in the toolbar.
 const iosVer = () => +(UA.match(/Version\/(\d+)/)?.[1] || UA.match(/OS (\d+)_/)?.[1] || 0);
 function installFlow() {
-  if (isAndroid) return {
+  if (inAppBrowser) return { kind: 'inapp', steps: [] };
+  if (isIOS && /CriOS/.test(UA)) return {
+    kind: 'chrome', arrow: 'top-right', anim: true,
+    steps: [['Tap the Share button', 'In the address bar, top right. Address bar at the bottom? It’s there.'], ['Tap Add to Home Screen', 'Scroll down the list if you don’t see it'], ['Tap Add', 'Top right corner'], ['Open the new icon', 'Setup starts there']],
+  };
+  if (isIOS && /EdgiOS/.test(UA)) return { kind: 'other', name: 'Edge', steps: [['Tap ☰', 'The menu button at the bottom'], ['Tap Share', ''], ['Tap Add to Home Screen', ''], ['Open the new icon', 'Setup starts there']] };
+  if (isIOS && /FxiOS/.test(UA)) return { kind: 'other', name: 'Firefox', steps: [['Tap ☰', 'The menu button'], ['Tap Share', ''], ['Tap Add to Home Screen', ''], ['Open the new icon', 'Setup starts there']] };
+  if (iosOtherBrowser) return { kind: 'other', name: 'this browser', steps: [['Open the browser’s menu', ''], ['Tap Share', ''], ['Tap Add to Home Screen', ''], ['Open the new icon', 'Setup starts there']] };
+  if (isAndroid) return { anim: true,
     kind: 'android', arrow: 'top-right',
     steps: [['Tap ⋮', 'Top right of Chrome'], ['Tap Add to Home screen', 'Or "Install app"'], ['Tap Install', ''], ['Open the new icon', 'Setup starts there']],
   };
   if (iosVer() >= 26) return {
-    kind: 'ios26', arrow: 'bottom-right',
+    kind: 'ios26', arrow: 'bottom-right', anim: true,
     steps: [['Tap •••', 'Bottom right, next to the address bar'], ['Tap Share', 'At the top of the menu'], ['Tap Add to Home Screen', 'Don’t see it? Tap View More or scroll down'], ['Tap Add', 'Keep "Open as Web App" on'], ['Open the new icon', 'Setup starts there']],
   };
   return {
-    kind: 'ios', arrow: 'bottom-center',
+    kind: 'ios', arrow: 'bottom-center', anim: true,
     steps: [['Tap the Share button', 'The square with an arrow, at the bottom'], ['Tap Add to Home Screen', 'Scroll down the list if you don’t see it'], ['Tap Add', 'Top right corner'], ['Open the new icon', 'Setup starts there']],
   };
 }
@@ -1119,6 +1142,11 @@ function installFrame(kind, i) {
       <div class="dm-list"><div class="dm-row">Add to Favorites</div><div class="dm-row">Find on Page</div><div class="dm-row hot"><em>⊞</em><span>Add to Home Screen</span>${tap}</div></div></div>`,
     `${page}${addDlg(true)}`,
     homeScreen][i];
+  if (kind === 'chrome') return [
+    `<div class="dm-chrome"><span class="dm-url">workout app</span><span class="hot">${shareIc}${tap}</span></div>${page}`,
+    `<div class="dm-chrome"><span class="dm-url">workout app</span><span>${shareIc}</span></div>${page}${sheet(true)}`,
+    `${page}${addDlg(false)}`,
+    homeScreen][i];
   if (kind === 'ios') return [
     `${page}<div class="dm-url-top">workout app</div><div class="dm-bar"><span>‹</span><span>›</span><span class="hot">${shareIc}${tap}</span><span>▢</span><span>⧉</span></div>`,
     `${page}${sheet(true)}`,
@@ -1133,7 +1161,7 @@ function installFrame(kind, i) {
 let installT = 0;
 function tickInstall() {
   clearInterval(installT);
-  if (ui.screen !== 'install' || installEvt || ui.installed) return;
+  if (ui.screen !== 'install' || installEvt || ui.installed || !installFlow().anim) return;
   installT = setInterval(() => {
     if (ui.screen !== 'install') return clearInterval(installT);
     const f = installFlow();
@@ -1146,15 +1174,33 @@ function tickInstall() {
 function vInstall() {
   const f = installFlow(), cur = ui.inStep || 0;
   setTimeout(tickInstall, 0);
+  const safariBtns = `<div class="row2 in-safari"><button class="btn primary" data-act="open-safari">Open in Safari</button><button class="btn ghost" data-act="copy-link">Copy link</button></div>`;
+  if (f.kind === 'inapp') return `<main class="page onboard install">
+    <p class="ob-kick">One quick step</p>
+    <h1 class="big">Open this in Safari</h1>
+    <p class="muted">You're in a browser built into another app, which can't add apps to your Home Screen. Open the link in Safari and it'll walk you through it.</p>
+    ${safariBtns}
+    <p class="muted small">Or tap <b>•••</b> (or the share icon) in this app and choose <b>Open in browser</b>.</p>
+    <button class="btn link in-skip" data-act="install-skip">Use it here anyway</button>
+  </main>`;
   let how;
   if (ui.installed) how = `<p class="in-done">${I.check} Added. Open it from your Home Screen to finish setup.</p>`;
   else if (installEvt) how = `<button class="btn primary xl" data-act="install-go">${I.plus} Add to Home Screen</button>
     <p class="muted small center">Then open it from your Home Screen to finish setup.</p>`;
-  else how = `
-    <div class="in-demo" aria-hidden="true"><div class="dm-phone"><div class="dm-screen">${installFrame(f.kind, cur)}</div></div></div>
-    <ol class="in-steps">${f.steps.map(([t, sub], j) => `<li class="${j === cur ? 'on' : ''}"><span class="in-n">${j + 1}</span><span><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</span></li>`).join('')}</ol>
-    ${iosOtherBrowser ? '<p class="muted small">Using Chrome or another app? If you don’t see Add to Home Screen, open this link in Safari.</p>' : ''}
-    <div class="in-arrow ${f.arrow}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v15M6 13l6 6 6-6"/></svg></div>`;
+  else {
+    const list = `<ol class="in-steps">${f.steps.map(([t, sub], j) => `<li class="${f.anim ? (j === cur ? 'on' : '') : 'on'}"><span class="in-n">${j + 1}</span><span><b>${t}</b>${sub ? `<small>${sub}</small>` : ''}</span></li>`).join('')}</ol>`;
+    how = (f.anim ? `<div class="in-demo" aria-hidden="true"><div class="dm-phone"><div class="dm-screen">${installFrame(f.kind, cur)}</div></div></div>` : '')
+      + (f.kind === 'other' ? `<p class="muted small">In ${esc(f.name)}:</p>` : '') + list
+      + (f.kind === 'other' ? `<div class="in-card"><b>Easiest: open it in Safari</b><span>Safari shows you each step.</span>${safariBtns}</div>` : '')
+      + (f.arrow ? `<div class="in-arrow ${f.arrow}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 4v15M6 13l6 6 6-6"/></svg></div>` : '');
+    const help = isIOS ? [
+      f.kind === 'ios26' ? ['No ••• button?', 'Your Share button is right in the toolbar. Tap it, then Add to Home Screen.'] : null,
+      ['Add to Home Screen isn’t in the list?', 'Tap View More, or scroll to the bottom and tap Edit Actions to add it.'],
+      ['Still stuck?', 'Open the link in Safari, which always has it.'],
+    ].filter(Boolean) : [['Don’t see Add to Home screen?', 'Look for Install app in the ⋮ menu, or open the link in Chrome.']];
+    how += `<button class="btn link in-help-btn" data-act="install-help">${ui.inHelp ? 'Hide help' : 'Can’t find it?'}</button>
+      ${ui.inHelp ? `<div class="in-help">${help.map(([q, a]) => `<p><b>${q}</b><span>${a}</span></p>`).join('')}${isIOS && f.kind !== 'ios26' && f.kind !== 'ios' ? '' : ''}${isIOS ? safariBtns : '<button class="btn ghost" data-act="copy-link">Copy link</button>'}</div>` : ''}`;
+  }
   return `<main class="page onboard install">
     <p class="ob-kick">Before you start</p>
     <h1 class="big">Add it to your Home Screen</h1>
@@ -1925,6 +1971,9 @@ const actions = {
   'share-app': shareApp,
   'ob-next': () => obNext(),
   'install-go': async () => { if (!installEvt) return; installEvt.prompt(); const r = await installEvt.userChoice.catch(() => null); installEvt = null; if (r?.outcome === 'accepted') ui.installed = true; render(); },
+  'install-help': () => { ui.inHelp = !ui.inHelp; render(); },
+  'open-safari': openInSafari,
+  'copy-link': copyLink,
   'install-skip': () => {
     if (isIOS && !confirm('Heads up: on iPhone, workouts saved in the browser won’t show up if you add the app to your Home Screen later. Continue in the browser?')) return;
     openOnboard(0);
